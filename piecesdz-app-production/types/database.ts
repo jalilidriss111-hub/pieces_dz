@@ -1,0 +1,109 @@
+export type ShopCategory = "new_parts" | "wrecker" | "bodywork" | "mechanical" | "accessories";
+export type PartCondition = "new" | "original" | "used" | "aftermarket";
+export type RequestStatus = "pending" | "found" | "closed";
+export type NewsTag = "arrival" | "promo" | "clearance";
+
+export interface Profile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  phone: string | null;
+  is_shop_owner: boolean;
+  wilaya: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Shop {
+  id: string;
+  owner_id: string;
+  name: string;
+  phone: string;
+  wilaya: string;
+  address: string;
+  maps_link: string | null;
+  category: ShopCategory;
+  verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartRequest {
+  id: string;
+  customer_id: string;
+  brand: string;
+  model: string;
+  year: number;
+  category: string;
+  part_name: string;
+  wilaya: string;
+  all_algeria: boolean;
+  status: RequestStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShopResponse {
+  id: string;
+  request_id: string;
+  shop_id: string;
+  price: number | null;
+  condition: PartCondition;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewsPost {
+  id: string;
+  shop_id: string;
+  title: string;
+  body: string | null;
+  tag: NewsTag;
+  created_at: string;
+}
+
+export interface Review {
+  id: string;
+  shop_id: string;
+  customer_id: string;
+  request_id: string | null;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShopRatingSummary {
+  shop_id: string;
+  avg_rating: number;
+  review_count: number;
+}
+
+export interface BlockedShop {
+  customer_id: string;
+  shop_id: string;
+  created_at: string;
+}
+
+// Minimal Database generic shape for @supabase/ssr type params.
+// (Not code-generated from the live schema — if you run
+// `supabase gen types typescript`, you can replace this file with the
+// generated output for full type safety on every query.)
+export interface Database {
+  public: {
+    Tables: {
+      profiles: { Row: Profile; Insert: Partial<Profile> & { id: string }; Update: Partial<Profile> };
+      shops: { Row: Shop; Insert: Partial<Shop>; Update: Partial<Shop> };
+      part_requests: { Row: PartRequest; Insert: Partial<PartRequest>; Update: Partial<PartRequest> };
+      shop_responses: { Row: ShopResponse; Insert: Partial<ShopResponse>; Update: Partial<ShopResponse> };
+      news_posts: { Row: NewsPost; Insert: Partial<NewsPost>; Update: Partial<NewsPost> };
+      reviews: { Row: Review; Insert: Partial<Review>; Update: Partial<Review> };
+      blocked_shops: { Row: BlockedShop; Insert: Partial<BlockedShop>; Update: Partial<BlockedShop> };
+    };
+    Views: {
+      shop_ratings: { Row: ShopRatingSummary };
+    };
+  };
+}
