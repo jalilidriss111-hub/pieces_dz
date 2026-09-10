@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from("news_posts")
-    .insert({ shop_id: shop.id, title, body: postBody ?? null, tag: tag ?? "arrival" })
+.insert([{ shop_id: shop.id, title, body: postBody ?? null, tag: tag ?? "arrival" }] as any)
     .select()
     .single();
 
