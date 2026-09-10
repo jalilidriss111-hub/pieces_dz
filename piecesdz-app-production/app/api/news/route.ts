@@ -21,10 +21,17 @@ export async function POST(request: Request) {
   }
 
   const { data, error } = await supabase
-    .from("news_posts")
-.insert([{ shop_id: shop.id, title, body: postBody ?? null, tag: tag ?? "arrival" }] as any)
-    .select()
-    .single();
+  .from("news_posts")
+  .insert([
+    {
+      shop_id: (shop as any).id,
+      title,
+      body: postBody ?? null,
+      tag: tag ?? "arrival",
+    },
+  ] as any)
+  .select()
+  .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ post: data });
