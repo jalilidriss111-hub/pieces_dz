@@ -1,7 +1,25 @@
-export type ShopCategory = "new_parts" | "wrecker" | "bodywork" | "mechanical" | "accessories";
-export type PartCondition = "new" | "original" | "used" | "aftermarket";
-export type RequestStatus = "pending" | "found" | "closed";
-export type NewsTag = "arrival" | "promo" | "clearance";
+export type ShopCategory =
+  | "new_parts"
+  | "wrecker"
+  | "bodywork"
+  | "mechanical"
+  | "accessories";
+
+export type PartCondition =
+  | "new"
+  | "original"
+  | "used"
+  | "aftermarket";
+
+export type RequestStatus =
+  | "pending"
+  | "found"
+  | "closed";
+
+export type NewsTag =
+  | "arrival"
+  | "promo"
+  | "clearance";
 
 export interface Profile {
   id: string;
@@ -87,23 +105,43 @@ export interface BlockedShop {
   created_at: string;
 }
 
-// Minimal Database generic shape for @supabase/ssr type params.
-// (Not code-generated from the live schema — if you run
-// `supabase gen types typescript`, you can replace this file with the
-// generated output for full type safety on every query.)
+type Table<T> = {
+  Row: T;
+  Insert: Partial<T>;
+  Update: Partial<T>;
+  Relationships: [];
+};
+
+type View<T> = {
+  Row: T;
+  Relationships: [];
+};
+
 export interface Database {
   public: {
     Tables: {
-      profiles: { Row: Profile; Insert: Partial<Profile> & { id: string }; Update: Partial<Profile> };
-      shops: { Row: Shop; Insert: Partial<Shop>; Update: Partial<Shop> };
-      part_requests: { Row: PartRequest; Insert: Partial<PartRequest>; Update: Partial<PartRequest> };
-      shop_responses: { Row: ShopResponse; Insert: Partial<ShopResponse>; Update: Partial<ShopResponse> };
-      news_posts: { Row: NewsPost; Insert: Partial<NewsPost>; Update: Partial<NewsPost> };
-      reviews: { Row: Review; Insert: Partial<Review>; Update: Partial<Review> };
-      blocked_shops: { Row: BlockedShop; Insert: Partial<BlockedShop>; Update: Partial<BlockedShop> };
+      profiles: Table<Profile>;
+      shops: Table<Shop>;
+      part_requests: Table<PartRequest>;
+      shop_responses: Table<ShopResponse>;
+      news_posts: Table<NewsPost>;
+      reviews: Table<Review>;
+      blocked_shops: Table<BlockedShop>;
     };
+
     Views: {
-      shop_ratings: { Row: ShopRatingSummary };
+      shop_ratings: View<ShopRatingSummary>;
     };
+
+    Functions: Record<string, never>;
+
+    Enums: {
+      shop_category: ShopCategory;
+      part_condition: PartCondition;
+      request_status: RequestStatus;
+      news_tag: NewsTag;
+    };
+
+    CompositeTypes: Record<string, never>;
   };
 }
