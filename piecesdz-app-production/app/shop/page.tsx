@@ -36,7 +36,7 @@ export default function ShopDashboardPage() {
     const { data: reqData } = await supabase
       .from("part_requests")
       .select("*, shop_responses(*)")
-      .or(`wilaya.eq.${shopData.wilaya},all_algeria.eq.true`)
+      .or(`wilaya.eq.${(shopData as any).wilaya},all_algeria.eq.true`)
       .neq("status", "closed")
       .order("created_at", { ascending: false });
     setRequests(reqData ?? []);
