@@ -24,7 +24,11 @@ export default function ShopDashboardPage() {
     if (!shopData) { router.push("/shop/onboarding"); return; }
     setShop(shopData);
 
-    const { data: ratingData } = await supabase.from("shop_ratings").select("*").eq("shop_id", shopData.id).single();
+    const { data: ratingData } = await supabase
+  .from("shop_ratings")
+  .select("*")
+  .eq("shop_id", (shopData as any).id)
+  .single();
     setRating(ratingData ?? { avg_rating: 0, review_count: 0 });
 
     // Requests matching this shop's wilaya, or all-Algeria requests. RLS
