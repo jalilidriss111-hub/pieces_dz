@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   const { shop_id } = await request.json();
   if (!shop_id) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
 
-  const { error } = await supabase.from("blocked_shops").insert({ customer_id: user.id, shop_id });
+  const { error } = await supabase.from("blocked_shops").insert([{ customer_id: user.id, shop_id }] as any);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
