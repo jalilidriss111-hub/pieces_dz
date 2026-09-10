@@ -14,7 +14,8 @@ const STEP_LABELS = ["Marque", "Modèle", "Année", "Catégorie", "Pièce", "Loc
 
 type Category = typeof CATEGORY_TREE[number];
 
-export default function SearchPage({ lang = "fr" }: { lang?: Lang }) {
+export default function SearchPage() {
+  const lang: Lang = "fr";
   const t = VEHICLE_FALLBACK_STRINGS[lang];
   const supabase = createClient();
   const [step, setStep] = useState(0);
