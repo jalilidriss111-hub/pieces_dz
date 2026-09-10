@@ -130,7 +130,7 @@ export default function SearchPage() {
       )}
 
       {step === 0 && manualVehicle && (
-        <Card className="p-5" dir={lang === "ar" ? "rtl" : "ltr"}>
+        <Card className="p-5"></Card>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-white">{t.manualEntryTitle}</h2>
             <button onClick={() => { setManualVehicle(false); setManualBrand(""); setManualModel(""); setManualYear(""); }} className="text-xs text-slate-500 hover:text-slate-300">
