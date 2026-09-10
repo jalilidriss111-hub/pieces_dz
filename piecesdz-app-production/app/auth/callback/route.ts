@@ -1,20 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-// Handles the redirect back from Google after the user approves sign-in.
-// Supabase Auth exchanges the ?code= for a session and sets auth cookies.
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
 
   if (code) {
     const supabase = createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth_failed`);
+  return NextResponse.redirect(
+    new URL("/login?error=auth_failed", request.url)
+  );
 }
