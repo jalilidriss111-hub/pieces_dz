@@ -8,7 +8,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
 
   const { error } = await supabase
     .from("part_requests")
-    .update({ status: "closed" } as any)
+    .update({ status: "closed" } as never)
     .eq("id", params.id)
     .eq("customer_id", user.id); // RLS also enforces this; explicit for clarity
 
