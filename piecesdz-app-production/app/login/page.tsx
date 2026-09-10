@@ -12,13 +12,12 @@ export default function LoginPage() {
     setError(null);
 
     const supabase = createClient();
-
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-      },
-    });
+    provider: "google",
+    options: {
+    redirectTo: "https://pieces-dz.onrender.com/auth/callback",
+  },
+}); 
 
     if (error) {
       setError(error.message);
