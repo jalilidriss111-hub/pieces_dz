@@ -23,9 +23,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const response = NextResponse.redirect(
-    new URL("/dashboard", request.url)
-  );
+ const response = NextResponse.redirect(
+  "https://pieces-dz.onrender.com/dashboard"
+);
 
   response.headers.set("Cache-Control", "no-store");
 
