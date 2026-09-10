@@ -8,22 +8,24 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   const signInWithGoogle = async () => {
-    setLoading(true);
-    setError(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-      },
-    });
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    }
-    // On success the browser is redirected to Google, then back to
-    // /auth/callback — no further client code runs here.
-  };
+  setLoading(true);
+  setError(null);
+
+  const supabase = createClient();
+  const redirectTo = `${window.location.origin}/auth/callback`;
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+    },
+  });
+
+  if (error) {
+    setError(error.message);
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
