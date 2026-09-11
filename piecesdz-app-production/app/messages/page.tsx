@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Chat from "@/components/Chat";
 import { MessageSquare, User, ArrowRight } from "lucide-react";
+
+interface MessageRow {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  media_type: "text" | "image" | "audio";
+  created_at: string;
+}
 
 interface Conversation {
   id: string;
@@ -12,225 +21,198 @@ interface Conversation {
   lastTime: string;
 }
 
-interface MessageRow {
-  id: string;
-  sender_id: string;
-  receiver_id: string;
-  content: string | null;
-  media_type: string | null;
-  created_at: string;
+interface Diagnostic {
+  code: string;
+  message: string;
+  status: "ok" | "error" | "info";
 }
 
 export default function MessagesPage() {
-  // إنشاء Client واحد فقط وعدم إعادة إنشائه مع كل Render
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = createClient();
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
-  const [activePartnerName, setActivePartnerName] = useState("");
+  const [activePartnerName, setActivePartnerName] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
 
-  // =========================================================
-  // تحميل المستخدم + المحادثات القديمة
-  // =========================================================
-  useEffect(() => {
-    let cancelled = false;
+  const addDiagnostic = (
+    code: string,
+    message: string,
+    status: "ok" | "error" | "info"
+  ) => {
+    setDiagnostics((prev) => [
+      ...prev,
+      {
+        code,
+        message,
+        status,
+      },
+    ]);
+  };
 
-    const loadMessages = async () => {
-      setLoading(true);
+  const loadUserAndConversations = useCallback(async () => {
+    setLoading(true);
+    setDiagnostics([]);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+    /*
+     * A — التأكد من المستخدم الحالي
+     */
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-      if (cancelled) return;
-
-      if (userError || !user) {
-        console.error("Auth error:", userError?.message);
-        setLoading(false);
-        return;
-      }
-
-      setCurrentUserId(user.id);
-
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .or(
-          `sender_id.eq.${user.id},receiver_id.eq.${user.id}`
-        )
-        .order("created_at", {
-          ascending: false,
-        });
-
-      if (cancelled) return;
-
-      if (error) {
-        console.error(
-          "Error loading messages:",
-          error.message
-        );
-        setLoading(false);
-        return;
-      }
-
-      const messages = (data || []) as MessageRow[];
-
-      const conversationsMap =
-        new Map<string, Conversation>();
-
-      for (const message of messages) {
-        const partnerId =
-          message.sender_id === user.id
-            ? message.receiver_id
-            : message.sender_id;
-
-        if (!partnerId) continue;
-
-        // بما أن الرسائل مرتبة من الأحدث إلى الأقدم،
-        // أول رسالة للشخص هي آخر رسالة في المحادثة.
-        if (!conversationsMap.has(partnerId)) {
-          conversationsMap.set(partnerId, {
-            id: partnerId,
-            name: `مستخدم (${partnerId.substring(0, 6)}...)`,
-            lastMessage: message.content || "",
-            lastTime: message.created_at,
-          });
-        }
-      }
-
-      setConversations(
-        Array.from(conversationsMap.values())
-      );
-
+    if (userError) {
+      addDiagnostic("A", `فشل جلب المستخدم: ${userError.message}`, "error");
       setLoading(false);
-    };
+      return;
+    }
 
-    loadMessages();
+    if (!user) {
+      addDiagnostic("A", "ما كاش مستخدم مسجل الدخول.", "error");
+      setLoading(false);
+      return;
+    }
 
-    return () => {
-      cancelled = true;
-    };
+    setCurrentUserId(user.id);
+
+    addDiagnostic(
+      "A",
+      `المستخدم الحالي: ${user.id}`,
+      "ok"
+    );
+
+    /*
+     * B — جلب الرسائل المرسلة
+     */
+    const { data: sentData, error: sentError } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("sender_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (sentError) {
+      addDiagnostic(
+        "B",
+        `فشل جلب الرسائل المرسلة: ${sentError.message}`,
+        "error"
+      );
+    } else {
+      addDiagnostic(
+        "B",
+        `الرسائل المرسلة: ${sentData?.length ?? 0}`,
+        "ok"
+      );
+    }
+
+    /*
+     * C — جلب الرسائل المستقبلة
+     */
+    const { data: receivedData, error: receivedError } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("receiver_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (receivedError) {
+      addDiagnostic(
+        "C",
+        `فشل جلب الرسائل المستقبلة: ${receivedError.message}`,
+        "error"
+      );
+    } else {
+      addDiagnostic(
+        "C",
+        `الرسائل المستقبلة: ${receivedData?.length ?? 0}`,
+        "ok"
+      );
+    }
+
+    if (sentError || receivedError) {
+      setLoading(false);
+      return;
+    }
+
+    const sentMessages = (sentData || []) as MessageRow[];
+    const receivedMessages = (receivedData || []) as MessageRow[];
+
+    /*
+     * D — دمج كل الرسائل
+     */
+    const allMessages = [...sentMessages, ...receivedMessages];
+
+    addDiagnostic(
+      "D",
+      `إجمالي الرسائل التي تم جلبها: ${allMessages.length}`,
+      "ok"
+    );
+
+    /*
+     * E — استخراج الأشخاص الآخرين
+     */
+    const partnerMap = new Map<string, MessageRow>();
+
+    for (const msg of allMessages) {
+      const partnerId =
+        msg.sender_id === user.id
+          ? msg.receiver_id
+          : msg.sender_id;
+
+      if (!partnerId || partnerId === user.id) continue;
+
+      const existing = partnerMap.get(partnerId);
+
+      /*
+       * نخلي أحدث رسالة لكل شخص فقط
+       */
+      if (
+        !existing ||
+        new Date(msg.created_at).getTime() >
+          new Date(existing.created_at).getTime()
+      ) {
+        partnerMap.set(partnerId, msg);
+      }
+    }
+
+    const partnersList: Conversation[] = Array.from(
+      partnerMap.entries()
+    ).map(([partnerId, lastMsg]) => ({
+      id: partnerId,
+      name: `مستخدم (${partnerId.substring(0, 6)}...)`,
+      lastMessage:
+        lastMsg.media_type === "text"
+          ? lastMsg.content
+          : lastMsg.media_type === "image"
+          ? "📷 صورة"
+          : "🎤 تسجيل صوتي",
+      lastTime: lastMsg.created_at,
+    }));
+
+    /*
+     * ترتيب المحادثات من الأحدث للأقدم
+     */
+    partnersList.sort(
+      (a, b) =>
+        new Date(b.lastTime).getTime() -
+        new Date(a.lastTime).getTime()
+    );
+
+    addDiagnostic(
+      "E",
+      `عدد المحادثات المستخرجة: ${partnersList.length}`,
+      partnersList.length > 0 ? "ok" : "info"
+    );
+
+    setConversations(partnersList);
+    setLoading(false);
   }, [supabase]);
 
-  // =========================================================
-  // REALTIME
-  //
-  // هذا الجزء مهم جداً:
-  // إذا وصلت رسالة جديدة للمستخدم الحالي، نضيف صاحبها
-  // إلى قائمة المحادثات حتى لو ما كانش عندو محادثة من قبل.
-  // =========================================================
   useEffect(() => {
-    if (!currentUserId) return;
+    loadUserAndConversations();
+  }, [loadUserAndConversations]);
 
-    const channel = supabase
-      .channel(`messages_page_${currentUserId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-        },
-        (payload) => {
-          const newMessage =
-            payload.new as MessageRow;
-
-          // نهتم فقط بالرسائل التي تخص المستخدم الحالي
-          const isForCurrentUser =
-            newMessage.receiver_id === currentUserId;
-
-          const isFromCurrentUser =
-            newMessage.sender_id === currentUserId;
-
-          if (
-            !isForCurrentUser &&
-            !isFromCurrentUser
-          ) {
-            return;
-          }
-
-          const partnerId =
-            isFromCurrentUser
-              ? newMessage.receiver_id
-              : newMessage.sender_id;
-
-          if (!partnerId) return;
-
-          const partnerName =
-            `مستخدم (${partnerId.substring(0, 6)}...)`;
-
-          setConversations((previous) => {
-            const existingIndex =
-              previous.findIndex(
-                (conversation) =>
-                  conversation.id === partnerId
-              );
-
-            // المحادثة موجودة
-            if (existingIndex !== -1) {
-              const updated = [...previous];
-
-              updated[existingIndex] = {
-                ...updated[existingIndex],
-                lastMessage:
-                  newMessage.content || "",
-                lastTime: newMessage.created_at,
-              };
-
-              // نحط المحادثة اللي فيها رسالة جديدة في الأعلى
-              const [conversation] =
-                updated.splice(existingIndex, 1);
-
-              return [
-                {
-                  ...conversation,
-                  lastMessage:
-                    newMessage.content || "",
-                  lastTime:
-                    newMessage.created_at,
-                },
-                ...updated,
-              ];
-            }
-
-            // أول رسالة بين الشخصين
-            return [
-              {
-                id: partnerId,
-                name: partnerName,
-                lastMessage:
-                  newMessage.content || "",
-                lastTime:
-                  newMessage.created_at,
-              },
-              ...previous,
-            ];
-          });
-
-          // إذا كانت رسالة واردة جديدة وما كناش داخلين
-          // مع هذا الشخص، نفتح المحادثة تلقائياً.
-          if (
-            newMessage.receiver_id === currentUserId &&
-            activePartnerId !== partnerId
-          ) {
-            setActivePartnerId(partnerId);
-            setActivePartnerName(partnerName);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUserId, supabase, activePartnerId]);
-
-  // =========================================================
-  // Loading
-  // =========================================================
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12 text-center text-slate-400">
@@ -239,9 +221,6 @@ export default function MessagesPage() {
     );
   }
 
-  // =========================================================
-  // المستخدم غير مسجل
-  // =========================================================
   if (!currentUserId) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12 text-center text-slate-400">
@@ -250,11 +229,10 @@ export default function MessagesPage() {
     );
   }
 
-  // =========================================================
-  // الصفحة
-  // =========================================================
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+
+      {/* العنوان */}
       <div className="flex items-center gap-2 mb-6">
         <MessageSquare
           className="text-orange-500"
@@ -266,11 +244,62 @@ export default function MessagesPage() {
         </h1>
       </div>
 
+      {/* لوحة التشخيص */}
+      <div className="mb-6 rounded-2xl border border-slate-700 bg-slate-950 overflow-hidden">
+
+        <div className="bg-slate-800 px-4 py-3">
+          <h2 className="text-orange-400 font-bold">
+            🛠️ تشخيص الرسائل
+          </h2>
+
+          <p className="text-xs text-slate-400 mt-1">
+            هذه اللوحة مؤقتة لمعرفة أين تتوقف عملية جلب المحادثات.
+          </p>
+        </div>
+
+        <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
+
+          {diagnostics.map((item, index) => (
+            <div
+              key={`${item.code}-${index}`}
+              className="rounded-lg border border-slate-800 bg-slate-900 p-3"
+            >
+              <div className="flex gap-2 items-start">
+
+                <span
+                  className={`font-black ${
+                    item.status === "ok"
+                      ? "text-green-400"
+                      : item.status === "error"
+                      ? "text-red-400"
+                      : "text-yellow-400"
+                  }`}
+                >
+                  [{item.code}]
+                </span>
+
+                <span className="text-sm text-slate-200 break-words">
+                  {item.message}
+                </span>
+
+              </div>
+            </div>
+          ))}
+
+        </div>
+
+        <button
+          onClick={loadUserAndConversations}
+          className="m-4 px-4 py-2 rounded-lg bg-orange-500 text-slate-950 font-bold"
+        >
+          🔄 إعادة التشخيص
+        </button>
+      </div>
+
+      {/* المحادثات والشات */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden min-h-[60vh]">
 
-        {/* =================================================
-            قائمة المحادثات
-        ================================================= */}
+        {/* قائمة المحادثات */}
         <div className="border-l border-slate-800 p-4 flex flex-col gap-2 overflow-y-auto max-h-[70vh]">
 
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
@@ -278,21 +307,25 @@ export default function MessagesPage() {
           </h2>
 
           {conversations.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-8">
-              لا توجد محادثات سابقة.
-            </p>
+            <div className="text-center py-8">
+
+              <p className="text-sm text-slate-500">
+                لا توجد محادثات سابقة.
+              </p>
+
+              <p className="text-xs text-yellow-500 mt-3">
+                شوف لوحة التشخيص فوق باش نعرفو السبب.
+              </p>
+
+            </div>
           ) : (
             conversations.map((partner) => (
+
               <button
                 key={partner.id}
                 onClick={() => {
-                  setActivePartnerId(
-                    partner.id
-                  );
-
-                  setActivePartnerName(
-                    partner.name
-                  );
+                  setActivePartnerId(partner.id);
+                  setActivePartnerName(partner.name);
                 }}
                 className={`w-full text-right p-3 rounded-xl transition-all flex items-center justify-between ${
                   activePartnerId === partner.id
@@ -300,6 +333,7 @@ export default function MessagesPage() {
                     : "bg-slate-800/40 hover:bg-slate-800 text-slate-300 border border-transparent"
                 }`}
               >
+
                 <div className="flex items-center gap-3 overflow-hidden">
 
                   <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-orange-400 shrink-0">
@@ -317,23 +351,26 @@ export default function MessagesPage() {
                     </p>
 
                   </div>
+
                 </div>
 
                 <ArrowRight
                   size={15}
                   className="text-slate-600 shrink-0"
                 />
+
               </button>
+
             ))
           )}
+
         </div>
 
-        {/* =================================================
-            الشات النشط
-        ================================================= */}
+        {/* الشات */}
         <div className="md:col-span-2 p-4 flex flex-col justify-center">
 
           {activePartnerId ? (
+
             <div>
 
               <div className="mb-3 pb-2 border-b border-slate-800 flex items-center justify-between">
@@ -354,7 +391,9 @@ export default function MessagesPage() {
               />
 
             </div>
+
           ) : (
+
             <div className="text-center py-16 text-slate-500">
 
               <MessageSquare
@@ -367,10 +406,13 @@ export default function MessagesPage() {
               </p>
 
             </div>
+
           )}
 
         </div>
+
       </div>
+
     </div>
   );
 }
