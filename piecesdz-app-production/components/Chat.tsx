@@ -3,12 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// استخدام متغيرات البيئة للعميل
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// تعريف نوع الخصائص (Props) لتفادي أخطاء TypeScript
 interface ChatProps {
   currentUserId: string;
   receiverId: string;
@@ -32,9 +30,8 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
   useEffect(() => {
     fetchMessages();
 
-    // الاستماع للرسائل الجديدة لحظياً
     const channel = supabase
-      .channel('public:messages')
+      .channel(`chat_${currentUserId}_${receiverId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
@@ -44,7 +41,10 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
             (newMsg.sender_id === currentUserId && newMsg.receiver_id === receiverId) ||
             (newMsg.sender_id === receiverId && newMsg.receiver_id === currentUserId)
           ) {
-            setMessages((prev) => [...prev, newMsg]);
+            setMessages((prev) => {
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
           }
         }
       )
@@ -59,7 +59,6 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // جلب الرسائل السابقة بين الطرفين
   const fetchMessages = async () => {
     const { data, error } = await supabase
       .from('messages')
@@ -72,24 +71,28 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     if (!error) setMessages(data || []);
   };
 
-  // إرسال رسالة نصية
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!newMessage.trim()) return;
+
+    const contentToSend = newMessage;
+    setNewMessage(''); // تفريغ الحقل فوراً لتحسين التجربة
 
     const { error } = await supabase.from('messages').insert([
       {
         sender_id: currentUserId,
         receiver_id: receiverId,
-        content: newMessage,
+        content: contentToSend,
         media_type: 'text',
       },
     ]);
 
-    if (!error) setNewMessage('');
+    if (error) {
+      console.error("Error sending message:", error.message);
+      alert("فشل إرسال الرسالة: " + error.message);
+    }
   };
 
-  // رفع وإرسال صورة أو ملف صوتي
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'audio') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -97,25 +100,24 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
 
     setUploading(true);
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
+    const fileName = `${Date.now()}_${Math.random().toString(36.substring(2))}.${fileExt}`;
     const filePath = `${currentUserId}/${fileName}`;
 
-    // رفع الملف إلى الـ Bucket
+    // رفع الملف إلى الـ Bucket المسمى chat_media
     const { error: uploadError } = await supabase.storage
       .from('chat_media')
-      .upload(filePath, file);
+      .upload(filePath, file, { upsert: true });
 
     if (uploadError) {
-      alert('فشل رفع الملف');
+      console.error("Upload error details:", uploadError);
+      alert('فشل رفع الملف: تأكد من أن الـ Bucket باسم chat_media موجود وأنه Public.');
       setUploading(false);
       return;
     }
 
-    // جلب الرابط العام للملف
     const { data } = supabase.storage.from('chat_media').getPublicUrl(filePath);
 
-    // إرسال رابط الملف كرسالة في جدول messages
-    await supabase.from('messages').insert([
+    const { error: insertError } = await supabase.from('messages').insert([
       {
         sender_id: currentUserId,
         receiver_id: receiverId,
@@ -124,21 +126,26 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
       },
     ]);
 
+    if (insertError) {
+      alert('فشل حفظ رابط الملف في قاعدة البيانات');
+    }
+
     setUploading(false);
+    e.target.value = ''; // إعادة تعيين الـ input لكي يسمح برفع نفس الملف لو دعت الحاجة
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '80vh', maxWidth: '600px', margin: 'auto', border: '1px solid #ccc', borderRadius: '8px', padding: '10px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '70vh', maxWidth: '600px', margin: 'auto', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '12px' }}>
       {/* صندوق الرسائل */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {messages.map((msg) => {
           const isMe = msg.sender_id === currentUserId;
           return (
-            <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#DCF8C6' : '#FFF', padding: '8px 12px', borderRadius: '8px', maxWidth: '70%', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-              {msg.media_type === 'text' && <p style={{ margin: 0, color: '#000' }}>{msg.content}</p>}
-              {msg.media_type === 'image' && <img src={msg.content} alt="media" style={{ maxWidth: '200px', borderRadius: '6px' }} />}
+            <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#f97316' : '#1e293b', color: isMe ? '#0f172a' : '#f8fafc', padding: '8px 12px', borderRadius: '8px', maxWidth: '75%', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
+              {msg.media_type === 'text' && <p style={{ margin: 0, wordBreak: 'break-word' }}>{msg.content}</p>}
+              {msg.media_type === 'image' && <img src={msg.content} alt="media" style={{ maxWidth: '200px', borderRadius: '6px', display: 'block' }} />}
               {msg.media_type === 'audio' && <audio controls src={msg.content} style={{ width: '200px' }} />}
-              <span style={{ fontSize: '10px', color: '#888', display: 'block', textAlign: 'right', marginTop: '4px' }}>
+              <span style={{ fontSize: '10px', opacity: 0.7, display: 'block', textAlign: 'right', marginTop: '4px' }}>
                 {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
@@ -147,7 +154,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {uploading && <p style={{ textAlign: 'center', color: 'blue' }}>جاري رفع الملف...</p>}
+      {uploading && <p style={{ textAlign: 'center', color: '#f97316', fontSize: '12px', margin: '4px 0' }}>جاري رفع الملف...</p>}
 
       {/* حقل الإدخال والأزرار */}
       <form onSubmit={sendMessage} style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
@@ -156,22 +163,22 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="اكتب رسالتك..."
-          style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc', color: '#000' }}
+          style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#1e293b', color: '#fff', outline: 'none' }}
         />
         
         {/* زر إرسال صورة */}
-        <label style={{ cursor: 'pointer', background: '#f0f0f0', padding: '8px 12px', borderRadius: '4px' }}>
+        <label style={{ cursor: 'pointer', background: '#1e293b', border: '1px solid #334155', padding: '8px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }} title="إرسال صورة">
           📷
           <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'image')} style={{ display: 'none' }} />
         </label>
 
         {/* زر إرسال صوت */}
-        <label style={{ cursor: 'pointer', background: '#f0f0f0', padding: '8px 12px', borderRadius: '4px' }}>
+        <label style={{ cursor: 'pointer', background: '#1e293b', border: '1px solid #334155', padding: '8px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }} title="إرسال صوت">
           🎤
           <input type="file" accept="audio/*" onChange={(e) => handleFileUpload(e, 'audio')} style={{ display: 'none' }} />
         </label>
 
-        <button type="submit" style={{ padding: '10px 15px', background: '#007BFF', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+        <button type="submit" style={{ padding: '10px 16px', background: '#f97316', color: '#0f172a', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
           إرسال
         </button>
       </form>
