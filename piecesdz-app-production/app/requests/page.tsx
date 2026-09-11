@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, Badge, PrimaryButton, GhostButton, inputCls } from "@/components/ui";
 import { CONDITIONS } from "@/lib/reference-data";
-import { ListChecks, Search, Clock, CheckCircle2, XCircle, MapPin, X, Star, Phone, ExternalLink, BadgeCheck } from "lucide-react";
+import { ListChecks, Search, Clock, CheckCircle2, XCircle, MapPin, X, Star, Phone, ExternalLink, BadgeCheck, MessageSquare } from "lucide-react";
 import Link from "next/link";
+import Chat from "@/components/Chat";
 
 const STATUS_TONE: Record<string, "pending" | "found" | "closed"> = { pending: "pending", found: "found", closed: "closed" };
 const STATUS_ICON: Record<string, any> = { pending: Clock, found: CheckCircle2, closed: XCircle };
@@ -29,7 +30,7 @@ export default function RequestsPage() {
       .order("created_at", { ascending: false });
     setRequests(data ?? []);
     setLoading(false);
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     load();
@@ -39,7 +40,7 @@ export default function RequestsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "shop_responses" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [load]);
+  }, [load, supabase]);
 
   const closeRequest = async (id: string) => {
     await fetch(`/api/requests/${id}/close`, { method: "POST" });
@@ -106,13 +107,14 @@ export default function RequestsPage() {
         </div>
       )}
 
-      {openReq && <RequestDetailModal request={openReq} onClose={() => setOpenReq(null)} onChanged={load} />}
+      {openReq && <RequestDetailModal request={openReq} currentUserId={userId} onClose={() => setOpenReq(null)} onChanged={load} />}
     </div>
   );
 }
 
-function RequestDetailModal({ request, onClose, onChanged }: { request: any; onClose: () => void; onChanged: () => void }) {
+function RequestDetailModal({ request, currentUserId, onClose, onChanged }: { request: any; currentUserId: string; onClose: () => void; onChanged: () => void }) {
   const [selectedShop, setSelectedShop] = useState<any>(null);
+  const [activeChatShop, setActiveChatShop] = useState<any>(null);
   const responses = request.shop_responses ?? [];
 
   return (
@@ -143,7 +145,19 @@ function RequestDetailModal({ request, onClose, onChanged }: { request: any; onC
                   <span className="text-slate-400">{CONDITIONS.find((c) => c.value === r.condition)?.label}</span>
                 </div>
                 {r.note && <p className="text-sm text-slate-400 mb-3">{r.note}</p>}
-                <button onClick={() => setSelectedShop(r.shops)} className="text-xs text-orange-400 font-medium">Voir les détails et noter →</button>
+                
+                <div className="flex items-center justify-between pt-2 border-t border-slate-700/50">
+                  <button onClick={() => setSelectedShop(r.shops)} className="text-xs text-slate-400 hover:text-white transition-colors">
+                    Voir les détails et noter →
+                  </button>
+                  {/* زر فتح الدردشة المباشرة مع التاجر */}
+                  <PrimaryButton 
+                    onClick={() => setActiveChatShop(r.shops)} 
+                    className="text-xs py-1.5 px-3 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold"
+                  >
+                    <MessageSquare size={13} /> دردشة مع التاجر
+                  </PrimaryButton>
+                </div>
               </div>
             ))}
           </div>
@@ -152,6 +166,22 @@ function RequestDetailModal({ request, onClose, onChanged }: { request: any; onC
 
       {selectedShop && (
         <ShopDetailAndReviewModal shop={selectedShop} requestId={request.id} onClose={() => setSelectedShop(null)} onChanged={onChanged} />
+      )}
+
+      {/* نافذة الدردشة المنبثقة مع التاجر */}
+      {activeChatShop && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80" onClick={() => setActiveChatShop(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-4 relative">
+            <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <MessageSquare size={16} className="text-orange-400" /> محادثة مع: {activeChatShop.name}
+              </h3>
+              <button onClick={() => setActiveChatShop(null)} className="text-slate-500 hover:text-white"><X size={18} /></button>
+            </div>
+            {/* استدعاء مكون الشات الذي أنشأناه سابقاً */}
+            <Chat currentUserId={currentUserId} receiverId={activeChatShop.user_id || activeChatShop.id} />
+          </div>
+        </div>
       )}
     </div>
   );
