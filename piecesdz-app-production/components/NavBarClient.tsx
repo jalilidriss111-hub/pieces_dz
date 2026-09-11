@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Wrench, Menu, X, Settings, Home, Search, ListChecks, Newspaper, Store, Gauge, ShieldCheck, CreditCard,
+  Wrench, Menu, X, Settings, Home, Search, ListChecks, Newspaper, Store, Gauge, ShieldCheck, CreditCard, MessageSquare,
 } from "lucide-react";
 import { translations } from "@/lib/i18n";
 
@@ -34,6 +34,7 @@ export function NavBarClient({ user, profile }: { user: any; profile: Profile })
     { href: "/", label: t.home, icon: Home },
     { href: "/search", label: t.search, icon: Search },
     { href: "/requests", label: t.requests, icon: ListChecks },
+    { href: "/messages", label: "الرسائل", icon: MessageSquare }, // تم إضافة رابط الرسائل هنا
     { href: "/news", label: t.news, icon: Newspaper },
     { href: "/shop", label: t.proSpace, icon: Store },
     { href: "/pricing", label: t.pricing, icon: CreditCard },
