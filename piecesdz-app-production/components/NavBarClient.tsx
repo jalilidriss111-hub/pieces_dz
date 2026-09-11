@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Wrench, Menu, X, Settings, Home, Search, ListChecks, Newspaper, Store, Gauge,
+  Wrench, Menu, X, Settings, Home, Search, ListChecks, Newspaper, Store, Gauge, ShieldCheck,
 } from "lucide-react";
 
 type Profile = {
@@ -135,6 +135,22 @@ export function NavBarClient({ user, profile }: { user: any; profile: Profile })
                 </div>
               </div>
             )}
+
+            {/* Privacy Policy link pinned to the very bottom */}
+            <div className="border-t border-slate-800 p-3 mt-auto">
+              <Link
+                href="/privacy"
+                onClick={() => setMenuOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+                  pathname === "/privacy"
+                    ? "bg-slate-900 text-orange-400"
+                    : "text-slate-400 hover:text-white hover:bg-slate-900/60"
+                }`}
+              >
+                <ShieldCheck size={16} />
+                Politique de confidentialité
+              </Link>
+            </div>
           </div>
         </div>
       )}
