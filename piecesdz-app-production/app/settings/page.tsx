@@ -57,10 +57,11 @@ export default function SettingsPage() {
   };
 
   const signOut = async () => {
-    await fetch("/api/auth/signout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  };
+  await supabase.auth.signOut();
+
+  router.replace("/login");
+  router.refresh();
+};
 
   if (loading || !checked) {
     return <div className="max-w-2xl mx-auto px-4 py-8 text-slate-500">Chargement...</div>;
