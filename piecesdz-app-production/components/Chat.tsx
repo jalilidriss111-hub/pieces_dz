@@ -76,7 +76,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     if (!newMessage.trim()) return;
 
     const contentToSend = newMessage;
-    setNewMessage(''); // تفريغ الحقل فوراً لتحسين التجربة
+    setNewMessage('');
 
     const { error } = await supabase.from('messages').insert([
       {
@@ -100,10 +100,11 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
 
     setUploading(true);
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36.substring(2))}.${fileExt}`;
+    // التصحيح هنا في الأقواس
+    const randomString = Math.random().toString(36).substring(2);
+    const fileName = `${Date.now()}_${randomString}.${fileExt}`;
     const filePath = `${currentUserId}/${fileName}`;
 
-    // رفع الملف إلى الـ Bucket المسمى chat_media
     const { error: uploadError } = await supabase.storage
       .from('chat_media')
       .upload(filePath, file, { upsert: true });
@@ -131,12 +132,11 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     }
 
     setUploading(false);
-    e.target.value = ''; // إعادة تعيين الـ input لكي يسمح برفع نفس الملف لو دعت الحاجة
+    e.target.value = '';
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '70vh', maxWidth: '600px', margin: 'auto', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '12px' }}>
-      {/* صندوق الرسائل */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {messages.map((msg) => {
           const isMe = msg.sender_id === currentUserId;
@@ -156,7 +156,6 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
 
       {uploading && <p style={{ textAlign: 'center', color: '#f97316', fontSize: '12px', margin: '4px 0' }}>جاري رفع الملف...</p>}
 
-      {/* حقل الإدخال والأزرار */}
       <form onSubmit={sendMessage} style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
         <input
           type="text"
@@ -166,13 +165,11 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
           style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#1e293b', color: '#fff', outline: 'none' }}
         />
         
-        {/* زر إرسال صورة */}
         <label style={{ cursor: 'pointer', background: '#1e293b', border: '1px solid #334155', padding: '8px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }} title="إرسال صورة">
           📷
           <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'image')} style={{ display: 'none' }} />
         </label>
 
-        {/* زر إرسال صوت */}
         <label style={{ cursor: 'pointer', background: '#1e293b', border: '1px solid #334155', padding: '8px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }} title="إرسال صوت">
           🎤
           <input type="file" accept="audio/*" onChange={(e) => handleFileUpload(e, 'audio')} style={{ display: 'none' }} />
