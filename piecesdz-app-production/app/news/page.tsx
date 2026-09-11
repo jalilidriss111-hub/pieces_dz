@@ -3,13 +3,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, Badge, PrimaryButton, GhostButton, inputCls } from "@/components/ui";
-import { PlusCircle, Send, Tag, TrendingUp, Sparkles, Store, MapPin } from "lucide-react";
+import { PlusCircle, Send, Tag, TrendingUp, Sparkles, Store, MapPin, Archive, Clock, ArrowLeft } from "lucide-react";
 
 const TAG_TONE: Record<string, "orange" | "found" | "pending"> = { arrival: "orange", promo: "found", clearance: "pending" };
 
 export default function NewsPage() {
   const supabase = createClient();
   const [news, setNews] = useState<any[]>([]);
+  const [archivedNews, setArchivedNews] = useState<any[]>([]);
+  const [showArchive, setShowArchive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasShop, setHasShop] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -24,7 +26,26 @@ export default function NewsPage() {
       .from("news_posts")
       .select("*, shops(name, wilaya)")
       .order("created_at", { ascending: false });
-    setNews(data ?? []);
+
+    if (data) {
+      const now = new Date().getTime();
+      const twentyFourHoursInMs = 24 * 60 * 60 * 1000;
+
+      const recent: any[] = [];
+      const archive: any[] = [];
+
+      data.forEach((item) => {
+        const itemTime = new Date(item.created_at).getTime();
+        if (now - itemTime <= twentyFourHoursInMs) {
+          recent.push(item);
+        } else {
+          archive.push(item);
+        }
+      });
+
+      setNews(recent);
+      setArchivedNews(archive);
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
@@ -32,7 +53,7 @@ export default function NewsPage() {
       setHasShop(!!shop);
     }
     setLoading(false);
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     load();
@@ -41,7 +62,7 @@ export default function NewsPage() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "news_posts" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [load]);
+  }, [load, supabase]);
 
   const submit = async () => {
     if (!title.trim()) return;
@@ -61,18 +82,46 @@ export default function NewsPage() {
 
   if (loading) return <div className="max-w-3xl mx-auto px-4 py-8 text-slate-500">Chargement...</div>;
 
+  const currentList = showArchive ? archivedNews : news;
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 pb-16">
-      <div className="flex items-start justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Nouveautés</h1>
-          <p className="text-slate-500 text-sm">Arrivages, promotions et actus des vendeurs</p>
+          <h1 className="text-2xl font-bold text-white mb-1">
+            {showArchive ? "Archives des Nouveautés" : "Nouveautés (24h)"}
+          </h1>
+          <p className="text-slate-500 text-sm">
+            {showArchive
+              ? "Publications de plus de 24 heures"
+              : "Arrivages, promotions et actus des dernières 24 heures"}
+          </p>
         </div>
-        {hasShop && (
-          <PrimaryButton onClick={() => setShowForm((s) => !s)} className="shrink-0 px-4 py-2.5 text-sm">
-            <PlusCircle size={15} /> Publier
-          </PrimaryButton>
-        )}
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Archive Toggle Button */}
+          <button
+            onClick={() => setShowArchive((prev) => !prev)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+          >
+            {showArchive ? (
+              <>
+                <ArrowLeft size={14} /> Voir récentes
+              </>
+            ) : (
+              <>
+                <Archive size={14} className="text-amber-400" />
+                Archives ({archivedNews.length})
+              </>
+            )}
+          </button>
+
+          {hasShop && (
+            <PrimaryButton onClick={() => setShowForm((s) => !s)} className="shrink-0 px-4 py-2 text-xs sm:text-sm">
+              <PlusCircle size={15} /> Publier
+            </PrimaryButton>
+          )}
+        </div>
       </div>
 
       {showForm && (
@@ -92,20 +141,26 @@ export default function NewsPage() {
         </Card>
       )}
 
-      {news.length === 0 ? (
+      {currentList.length === 0 ? (
         <Card className="p-10 text-center text-slate-500 text-sm">
-          Aucune actualité pour le moment. Les vendeurs inscrits peuvent publier ici.
+          {showArchive
+            ? "Aucune publication archivée."
+            : "Aucune actualité au cours des dernières 24 heures. Consultez les archives pour les anciennes annonces."}
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
-          {news.map((n) => (
+          {currentList.map((n) => (
             <Card key={n.id} className="p-5">
               <div className="flex items-center justify-between mb-2">
                 <Badge tone={TAG_TONE[n.tag]}>
                   {n.tag === "promo" ? <Tag size={12} /> : n.tag === "clearance" ? <TrendingUp size={12} /> : <Sparkles size={12} />}
                   {n.tag}
                 </Badge>
-                <span className="text-xs text-slate-500">{new Date(n.created_at).toLocaleDateString()}</span>
+                <span className="text-xs text-slate-500 flex items-center gap-1">
+                  <Clock size={12} />
+                  {new Date(n.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  <span className="ml-1">({new Date(n.created_at).toLocaleDateString()})</span>
+                </span>
               </div>
               <h3 className="font-semibold text-white mb-1.5">{n.title}</h3>
               {n.body && <p className="text-sm text-slate-400 mb-3">{n.body}</p>}
