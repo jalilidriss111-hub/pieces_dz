@@ -2,13 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Card, Badge, PrimaryButton, GhostButton, inputCls } from "@/components/ui";
+import { Card, Badge, PrimaryButton, inputCls } from "@/components/ui";
 import { PlusCircle, Send, Tag, TrendingUp, Sparkles, Store, MapPin, Archive, Clock, ArrowLeft } from "lucide-react";
 
 const TAG_TONE: Record<string, "orange" | "found" | "pending"> = { arrival: "orange", promo: "found", clearance: "pending" };
 
 export default function NewsPage() {
-  const supabase = createClient();
   const [news, setNews] = useState<any[]>([]);
   const [archivedNews, setArchivedNews] = useState<any[]>([]);
   const [showArchive, setShowArchive] = useState(false);
@@ -22,9 +21,10 @@ export default function NewsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    const supabase = createClient();
     const { data } = await supabase
       .from("news_posts")
-      .select("*, shops(name, wilaya)")
+      .select("*, shops(name, shop_name, wilaya)")
       .order("created_at", { ascending: false });
 
     if (data) {
@@ -34,7 +34,7 @@ export default function NewsPage() {
       const recent: any[] = [];
       const archive: any[] = [];
 
-      data.forEach((item) => {
+      data.forEach((item: any) => {
         const itemTime = new Date(item.created_at).getTime();
         if (now - itemTime <= twentyFourHoursInMs) {
           recent.push(item);
@@ -53,31 +53,40 @@ export default function NewsPage() {
       setHasShop(!!shop);
     }
     setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     load();
+    const supabase = createClient();
     const channel = supabase
       .channel("news-feed")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "news_posts" }, () => load())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [load, supabase]);
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [load]);
 
   const submit = async () => {
     if (!title.trim()) return;
     setPosting(true);
     setError(null);
-    const res = await fetch("/api/news", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body, tag }),
-    });
-    const json = await res.json();
-    setPosting(false);
-    if (!res.ok) { setError(json.error); return; }
-    setTitle(""); setBody(""); setShowForm(false);
-    load();
+    try {
+      const res = await fetch("/api/news", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, body, tag }),
+      });
+      const json = await res.json();
+      setPosting(false);
+      if (!res.ok) { setError(json.error); return; }
+      setTitle(""); setBody(""); setShowForm(false);
+      load();
+    } catch {
+      setPosting(false);
+      setError("Une erreur est survenue lors de la publication.");
+    }
   };
 
   if (loading) return <div className="max-w-3xl mx-auto px-4 py-8 text-slate-500">Chargement...</div>;
@@ -99,7 +108,6 @@ export default function NewsPage() {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          {/* Archive Toggle Button */}
           <button
             onClick={() => setShowArchive((prev) => !prev)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
@@ -149,10 +157,10 @@ export default function NewsPage() {
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
-          {currentList.map((n) => (
+          {currentList.map((n: any) => (
             <Card key={n.id} className="p-5">
               <div className="flex items-center justify-between mb-2">
-                <Badge tone={TAG_TONE[n.tag]}>
+                <Badge tone={TAG_TONE[n.tag] || "orange"}>
                   {n.tag === "promo" ? <Tag size={12} /> : n.tag === "clearance" ? <TrendingUp size={12} /> : <Sparkles size={12} />}
                   {n.tag}
                 </Badge>
@@ -165,7 +173,7 @@ export default function NewsPage() {
               <h3 className="font-semibold text-white mb-1.5">{n.title}</h3>
               {n.body && <p className="text-sm text-slate-400 mb-3">{n.body}</p>}
               <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-3 border-t border-slate-800">
-                <Store size={12} /> {n.shops?.name} <span className="mx-1">·</span> <MapPin size={11} /> {n.shops?.wilaya}
+                <Store size={12} /> {n.shops?.name || n.shops?.shop_name || "Vendeur"} <span className="mx-1">·</span> <MapPin size={11} /> {n.shops?.wilaya}
               </div>
             </Card>
           ))}
