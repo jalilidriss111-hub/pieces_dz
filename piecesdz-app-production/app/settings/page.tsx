@@ -7,9 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Card, GhostButton, PrimaryButton } from "@/components/ui";
 import { LogOut, Ban, Store, Globe, Info, LogIn } from "lucide-react";
 import Link from "next/link";
+import { translations } from "@/lib/i18n";
 
-// This page is the app's Settings screen, reachable via the gear icon in
-// the header and now living at its own real route: /settings.
 export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -31,6 +30,8 @@ export default function SettingsPage() {
     localStorage.setItem("piecesdz_lang", newLang);
     document.documentElement.dir = newLang === "ar" ? "rtl" : "ltr";
     document.documentElement.lang = newLang;
+    // Reload page to apply new translations instantly across components
+    window.location.reload();
   };
 
   const load = useCallback(async () => {
@@ -57,7 +58,7 @@ export default function SettingsPage() {
 
     setChecked(true);
     setLoading(false);
-  }, []);
+  }, [supabase]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -76,13 +77,15 @@ export default function SettingsPage() {
     router.refresh();
   };
 
+  const t = translations[lang as keyof typeof translations] || translations.fr;
+
   if (loading || !checked) {
     return <div className="max-w-2xl mx-auto px-4 py-8 text-slate-500">Chargement...</div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 pb-16">
-      <h1 className="text-2xl font-bold text-white mb-6">Paramètres</h1>
+      <h1 className="text-2xl font-bold text-white mb-6">{t.settings}</h1>
 
       {profile ? (
         <>
@@ -101,7 +104,7 @@ export default function SettingsPage() {
           </Card>
 
           <Card className="p-5 mb-4">
-            <h2 className="font-semibold text-white mb-3 flex items-center gap-2"><Store size={16} className="text-orange-400" /> Espace professionnel</h2>
+            <h2 className="font-semibold text-white mb-3 flex items-center gap-2"><Store size={16} className="text-orange-400" /> {t.proSpace}</h2>
             {hasShop ? (
               <Link href="/shop"><GhostButton className="w-full">Voir mon tableau de bord vendeur</GhostButton></Link>
             ) : (
@@ -132,7 +135,7 @@ export default function SettingsPage() {
         <Card className="p-6 mb-4 text-center">
           <p className="text-slate-300 mb-4">Connectez-vous pour accéder à votre compte, vos demandes et votre espace vendeur.</p>
           <Link href="/login">
-            <PrimaryButton className="w-full"><LogIn size={16} /> Se connecter</PrimaryButton>
+            <PrimaryButton className="w-full"><LogIn size={16} /> {t.login}</PrimaryButton>
           </Link>
         </Card>
       )}
@@ -151,18 +154,16 @@ export default function SettingsPage() {
       </Card>
 
       <Card className="p-5 mb-4">
-        <h2 className="font-semibold text-white mb-3 flex items-center gap-2"><Info size={16} className="text-orange-400" /> À propos de PiecesDZ</h2>
+        <h2 className="font-semibold text-white mb-3 flex items-center gap-2"><Info size={16} className="text-orange-400" /> {t.about}</h2>
         <p className="text-sm text-slate-400 leading-relaxed">
-          PiecesDZ connecte les propriétaires de véhicules avec des vendeurs de pièces détachées, des casses
-          et des ateliers à travers l'Algérie. Publiez une demande, recevez des réponses réelles de vendeurs
-          inscrits, et évaluez votre expérience.
+          {t.aboutText}
         </p>
       </Card>
 
       {profile && (
         <>
           <button onClick={signOut} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-red-500/30 text-red-400 font-medium hover:bg-red-500/10">
-            <LogOut size={16} /> Déconnexion
+            <LogOut size={16} /> {t.logout}
           </button>
           <p className="text-xs text-slate-600 text-center mt-3">
             Pour changer de compte Google, déconnectez-vous puis reconnectez-vous avec un autre compte.
