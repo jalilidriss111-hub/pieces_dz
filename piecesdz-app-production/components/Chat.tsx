@@ -8,16 +8,10 @@ import React, {
 } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
-);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface ChatProps {
   currentUserId: string;
@@ -33,68 +27,20 @@ interface Message {
   created_at: string;
 }
 
-interface Diagnostic {
-  code: string;
-  text: string;
-  details?: string;
-  time: string;
-}
-
-export default function Chat({
-  currentUserId,
-  receiverId,
-}: ChatProps) {
+export default function Chat({ currentUserId, receiverId }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // معرف المستقبل الحقيقي بعد التحقق (سواء كان زبوناً أو تاجراً صاحب محل)
+  // معرف المستقبل الحقيقي بعد التحقق
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<boolean>(true);
 
-  const [diagnostics, setDiagnostics] = useState<
-    Diagnostic[]
-  >([]);
-
-  const messagesEndRef =
-    useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // =====================================================
-  // DIAGNOSTIC
+  // RESOLVE SHOP_ID TO USER_ID (حل المشكلة في الخلفية)
   // =====================================================
-
-  const addDiagnostic = useCallback(
-    (
-      code: string,
-      text: string,
-      details?: string
-    ) => {
-      const now = new Date().toLocaleTimeString();
-
-      const item: Diagnostic = {
-        code,
-        text,
-        details,
-        time: now,
-      };
-
-      console.log(
-        `[CHAT ${code}] ${text}`,
-        details || ''
-      );
-
-      setDiagnostics((prev) => [
-        ...prev.slice(-11),
-        item,
-      ]);
-    },
-    []
-  );
-
-  // =====================================================
-  // RESOLVE SHOP_ID TO USER_ID (حل مشكلة المعرف الخاطئ)
-  // =====================================================
-
   useEffect(() => {
     let isMounted = true;
 
@@ -110,7 +56,7 @@ export default function Chat({
       setResolvingId(true);
 
       try {
-        // نتحقق أولاً إن كان receiverId عبارة عن shop_id في جدول shops
+        // نتحقق أولاً إن كان receiverId عبارة عن shop_id
         const { data: shop } = await supabase
           .from('shops')
           .select('user_id')
@@ -120,22 +66,11 @@ export default function Chat({
         if (isMounted) {
           if (shop && shop.user_id) {
             setTargetUserId(shop.user_id);
-            addDiagnostic(
-              'RESOLVE',
-              'تم تحويل shop_id إلى user_id التاجر تلقائياً',
-              `Shop: ${receiverId} -> User: ${shop.user_id}`
-            );
           } else {
-            // إذا لم يكن shop_id، فهو user_id مباشر
             setTargetUserId(receiverId);
-            addDiagnostic(
-              'RESOLVE',
-              'المستقبل هو user_id مباشر',
-              receiverId
-            );
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         if (isMounted) {
           setTargetUserId(receiverId);
         }
@@ -151,341 +86,97 @@ export default function Chat({
     return () => {
       isMounted = false;
     };
-  }, [receiverId, addDiagnostic]);
+  }, [receiverId]);
 
   // =====================================================
   // CHECK IDS
   // =====================================================
-
   const checkIds = useCallback(() => {
-    if (!currentUserId) {
-      addDiagnostic(
-        'A',
-        'currentUserId فارغ',
-        'ما قدرناش نحدد المستخدم الحالي.'
-      );
-
+    if (!currentUserId || !targetUserId || currentUserId === targetUserId) {
       return false;
     }
-
-    if (!targetUserId) {
-      addDiagnostic(
-        'A',
-        'targetUserId فارغ',
-        'جاري تحديد معرف المستقبل الحقيقي...'
-      );
-
-      return false;
-    }
-
-    if (currentUserId === targetUserId) {
-      addDiagnostic(
-        'A',
-        'معرف المرسل والمستقبل متساوي',
-        currentUserId
-      );
-
-      return false;
-    }
-
     return true;
-  }, [
-    currentUserId,
-    targetUserId,
-    addDiagnostic,
-  ]);
+  }, [currentUserId, targetUserId]);
 
   // =====================================================
   // FETCH MESSAGES
   // =====================================================
-
-  const fetchMessages = useCallback(
-    async (showDiagnostic = true) => {
-      if (!checkIds() || !targetUserId) return;
-
-      try {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('messages')
-          .select('*')
-          .or(
-            `and(sender_id.eq.${currentUserId},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${currentUserId})`
-          )
-          .order('created_at', {
-            ascending: true,
-          });
-
-        if (error) {
-          addDiagnostic(
-            'B',
-            'فشل جلب رسائل المحادثة',
-            `${error.code || ''} ${error.message || ''}`
-          );
-
-          return;
-        }
-
-        const result =
-          (data || []) as Message[];
-
-        setMessages(result);
-
-        if (result.length === 0) {
-          if (showDiagnostic) {
-            addDiagnostic(
-              'G',
-              'استعلام المحادثة رجع 0 رسائل',
-              `currentUser=${currentUserId} | targetUser=${targetUserId}`
-            );
-          }
-
-          return;
-        }
-
-        if (showDiagnostic) {
-          addDiagnostic(
-            'H',
-            `استعلام المحادثة رجع ${result.length} رسالة`,
-            `currentUser=${currentUserId} | targetUser=${targetUserId}`
-          );
-        }
-      } catch (error: any) {
-        addDiagnostic(
-          'B',
-          'خطأ أثناء الاتصال بقاعدة البيانات',
-          error?.message ||
-            String(error)
-        );
-      }
-    },
-    [
-      currentUserId,
-      targetUserId,
-      checkIds,
-      addDiagnostic,
-    ]
-  );
-
-  // =====================================================
-  // INITIAL FETCH + POLLING
-  // =====================================================
-
-  useEffect(() => {
-    if (resolvingId || !checkIds()) return;
-
-    addDiagnostic(
-      'START',
-      'بدأ نظام تشخيص الشات',
-      `من: ${currentUserId} | إلى: ${targetUserId}`
-    );
-
-    fetchMessages(true);
-
-    const interval = setInterval(() => {
-      fetchMessages(false);
-    }, 3000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [
-    resolvingId,
-    currentUserId,
-    targetUserId,
-    fetchMessages,
-    checkIds,
-    addDiagnostic,
-  ]);
-
-  // =====================================================
-  // SCROLL
-  // =====================================================
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: 'smooth',
-    });
-  }, [messages]);
-
-  // =====================================================
-  // SEND MESSAGE
-  // =====================================================
-
-  const sendMessage = async (
-    e?: React.FormEvent
-  ) => {
-    if (e) e.preventDefault();
-
-    const contentToSend =
-      newMessage.trim();
-
-    if (!contentToSend) return;
-
-    setDiagnostics([]);
-
-    if (!checkIds() || !targetUserId) {
-      return;
-    }
-
-    addDiagnostic(
-      'START',
-      'بدأ إرسال رسالة جديدة',
-      `من: ${currentUserId} | إلى (User ID): ${targetUserId}`
-    );
-
-    setNewMessage('');
+  const fetchMessages = useCallback(async () => {
+    if (!checkIds() || !targetUserId) return;
 
     try {
-      const {
-        data: insertedData,
-        error: insertError,
-      } = await supabase
-        .from('messages')
-        .insert([
-          {
-            sender_id:
-              currentUserId,
-
-            receiver_id:
-              targetUserId, // إرسال مباشر لـ user_id الحقيقي
-
-            content:
-              contentToSend,
-
-            media_type:
-              'text',
-          },
-        ])
-        .select()
-        .single();
-
-      if (insertError) {
-        addDiagnostic(
-          'E',
-          'الإرسال فشل — INSERT ما نجحش',
-          `${insertError.code || ''} ${insertError.message || ''}`
-        );
-
-        setNewMessage(
-          contentToSend
-        );
-
-        return;
-      }
-
-      if (!insertedData) {
-        addDiagnostic(
-          'F',
-          'INSERT قال نجح ولكن ما رجعتش بيانات الرسالة'
-        );
-
-        setNewMessage(
-          contentToSend
-        );
-
-        return;
-      }
-
-      const insertedMessage =
-        insertedData as Message;
-
-      addDiagnostic(
-        'D',
-        'INSERT نجح والرسالة دخلت قاعدة البيانات',
-        `message_id=${insertedMessage.id}`
-      );
-
-      // VERIFY EXACT MESSAGE
-      const {
-        data: verifiedMessage,
-        error: verifyError,
-      } = await supabase
-        .from('messages')
-        .select('*')
-        .eq(
-          'id',
-          insertedMessage.id
-        )
-        .maybeSingle();
-
-      if (verifyError || !verifiedMessage) {
-        addDiagnostic(
-          'F',
-          'الرسالة دخلت لكن فشل التحقق منها في DB',
-          `message_id=${insertedMessage.id}`
-        );
-        return;
-      }
-
-      addDiagnostic(
-        'D',
-        'تم التحقق: الرسالة موجودة فعلاً في DB',
-        `message_id=${insertedMessage.id}`
-      );
-
-      // TEST CONVERSATION QUERY
-      const {
-        data: conversationData,
-        error: conversationError,
-      } = await supabase
+      const { data, error } = await supabase
         .from('messages')
         .select('*')
         .or(
           `and(sender_id.eq.${currentUserId},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${currentUserId})`
         )
-        .order('created_at', {
-          ascending: true,
-        });
+        .order('created_at', { ascending: true });
 
-      if (conversationError) {
-        addDiagnostic(
-          'B',
-          'استعلام المحادثة فشل بعد الإرسال',
-          `${conversationError.code || ''} ${conversationError.message || ''}`
-        );
+      if (!error && data) {
+        setMessages(data as Message[]);
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    }
+  }, [currentUserId, targetUserId, checkIds]);
+
+  // =====================================================
+  // INITIAL FETCH + POLLING
+  // =====================================================
+  useEffect(() => {
+    if (resolvingId || !checkIds()) return;
+
+    fetchMessages();
+
+    const interval = setInterval(() => {
+      fetchMessages();
+    }, 3000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [resolvingId, currentUserId, targetUserId, fetchMessages, checkIds]);
+
+  // =====================================================
+  // SCROLL
+  // =====================================================
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // =====================================================
+  // SEND MESSAGE
+  // =====================================================
+  const sendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    const contentToSend = newMessage.trim();
+    if (!contentToSend || !checkIds() || !targetUserId) return;
+
+    setNewMessage('');
+
+    try {
+      const { error: insertError } = await supabase
+        .from('messages')
+        .insert([
+          {
+            sender_id: currentUserId,
+            receiver_id: targetUserId,
+            content: contentToSend,
+            media_type: 'text',
+          },
+        ]);
+
+      if (insertError) {
+        setNewMessage(contentToSend);
+        alert('فشل إرسال الرسالة: ' + insertError.message);
         return;
       }
 
-      const conversation =
-        (conversationData || []) as Message[];
-
-      const messageFound =
-        conversation.some(
-          (msg) => msg.id === insertedMessage.id
-        );
-
-      if (!messageFound) {
-        addDiagnostic(
-          'C',
-          'الرسالة موجودة في DB لكن فلتر المحادثة ما رجعهاش',
-          `message_id=${insertedMessage.id} | messages=${conversation.length}`
-        );
-
-        console.log('[CHAT C DEBUG]', {
-          currentUserId,
-          targetUserId,
-          insertedMessage,
-          conversation,
-        });
-        return;
-      }
-
-      addDiagnostic(
-        'D',
-        'الرسالة موجودة وتظهر في استعلام المحادثة',
-        `عدد رسائل المحادثة: ${conversation.length}`
-      );
-
-      setMessages(conversation);
+      fetchMessages();
     } catch (error: any) {
-      addDiagnostic(
-        'B',
-        'خطأ غير متوقع أثناء الإرسال',
-        error?.message || String(error)
-      );
-
+      console.error('Error sending message:', error);
       setNewMessage(contentToSend);
     }
   };
@@ -493,17 +184,14 @@ export default function Chat({
   // =====================================================
   // FILE UPLOAD
   // =====================================================
-
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'image' | 'audio'
   ) => {
     const files = e.target.files;
-
     if (!files || files.length === 0) return;
 
     const file = files[0];
-
     if (!checkIds() || !targetUserId) {
       e.target.value = '';
       return;
@@ -522,17 +210,10 @@ export default function Chat({
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) {
-        addDiagnostic(
-          'I',
-          'فشل رفع الملف إلى Storage',
-          uploadError.message
-        );
         alert('فشل رفع الملف: ' + uploadError.message);
         setUploading(false);
         return;
       }
-
-      addDiagnostic('D', 'تم رفع الملف إلى Storage', filePath);
 
       const { data: publicUrlData } = supabase.storage
         .from('chat_media')
@@ -540,57 +221,24 @@ export default function Chat({
 
       const publicUrl = publicUrlData?.publicUrl;
 
-      if (!publicUrl) {
-        addDiagnostic('I', 'تم رفع الملف لكن Public URL فارغ');
-        setUploading(false);
-        return;
-      }
-
-      const { data: insertedData, error: insertError } = await supabase
-        .from('messages')
-        .insert([
+      if (publicUrl) {
+        await supabase.from('messages').insert([
           {
             sender_id: currentUserId,
             receiver_id: targetUserId,
             content: publicUrl,
             media_type: type,
           },
-        ])
-        .select()
-        .single();
-
-      if (insertError) {
-        addDiagnostic(
-          'E',
-          'الملف ترفع لكن حفظ الرسالة فشل',
-          `${insertError.code || ''} ${insertError.message || ''}`
-        );
-        setUploading(false);
-        return;
+        ]);
+        fetchMessages();
       }
-
-      addDiagnostic(
-        'D',
-        'رسالة الملف دخلت قاعدة البيانات',
-        `message_id=${insertedData?.id || 'unknown'}`
-      );
-
-      await fetchMessages(true);
     } catch (error: any) {
-      addDiagnostic(
-        'I',
-        'خطأ أثناء رفع/إرسال الملف',
-        error?.message || String(error)
-      );
+      console.error('Error uploading file:', error);
     }
 
     setUploading(false);
     e.target.value = '';
   };
-
-  // =====================================================
-  // RENDER
-  // =====================================================
 
   return (
     <div
@@ -607,84 +255,8 @@ export default function Chat({
       }}
     >
       {/* =========================================
-          DIAGNOSTIC PANEL
+          MESSAGES AREA
       ========================================== */}
-
-      <div
-        style={{
-          background: '#020617',
-          border: '1px solid #334155',
-          borderRadius: '8px',
-          marginBottom: '10px',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            padding: '8px 10px',
-            background: '#1e293b',
-            color: '#f97316',
-            fontWeight: 'bold',
-            fontSize: '12px',
-          }}
-        >
-          🛠️ تشخيص الرسائل {resolvingId && '(جاري التحقق من معرف التاجر...)'}
-        </div>
-
-        <div
-          style={{
-            maxHeight: '150px',
-            overflowY: 'auto',
-            padding: '8px',
-          }}
-        >
-          {diagnostics.length === 0 ? (
-            <div style={{ color: '#64748b', fontSize: '11px' }}>
-              مازال ما كاين حتى تشخيص...
-            </div>
-          ) : (
-            diagnostics.map((item, index) => (
-              <div
-                key={index}
-                style={{
-                  padding: '5px 0',
-                  borderBottom: '1px solid #1e293b',
-                  fontSize: '11px',
-                }}
-              >
-                <span
-                  style={{
-                    fontWeight: 'bold',
-                    color:
-                      item.code === 'D' || item.code === 'H' || item.code === 'RESOLVE'
-                        ? '#22c55e'
-                        : item.code === 'START'
-                        ? '#f97316'
-                        : '#ef4444',
-                  }}
-                >
-                  [{item.code}]
-                </span>{' '}
-                <span style={{ color: '#e2e8f0' }}>{item.text}</span>
-                <div
-                  style={{
-                    color: '#64748b',
-                    marginTop: '2px',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {item.details && item.details} • {item.time}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* =========================================
-          MESSAGES
-      ========================================== */}
-
       <div
         style={{
           flex: 1,
@@ -698,6 +270,10 @@ export default function Chat({
         {resolvingId ? (
           <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>
             جاري تحضير المحادثة...
+          </div>
+        ) : messages.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>
+            لا توجد رسائل بعد. اكتب رسالتك وابدأ المحادثة!
           </div>
         ) : (
           messages.map((msg) => {
@@ -760,10 +336,7 @@ export default function Chat({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* =========================================
-          UPLOADING
-      ========================================== */}
-
+      {/* UPLOADING STATE */}
       {uploading && (
         <p
           style={{
@@ -778,9 +351,8 @@ export default function Chat({
       )}
 
       {/* =========================================
-          INPUT
+          INPUT AREA
       ========================================== */}
-
       <form
         onSubmit={sendMessage}
         style={{
