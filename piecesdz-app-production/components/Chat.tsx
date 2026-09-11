@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -29,8 +29,9 @@ export default function Chat({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // تحميل الرسائل + تشغيل Realtime
   useEffect(() => {
+    let mounted = true;
+
     const fetchMessages = async () => {
       const { data, error } = await supabase
         .from("messages")
@@ -50,13 +51,19 @@ export default function Chat({
         return;
       }
 
-      setMessages((data as Message[]) || []);
+      if (mounted) {
+        setMessages(
+          (data as unknown as Message[]) || []
+        );
+      }
     };
 
     fetchMessages();
 
     const channel = supabase
-      .channel(`chat_${currentUserId}_${receiverId}`)
+      .channel(
+        `chat_${currentUserId}_${receiverId}`
+      )
       .on(
         "postgres_changes",
         {
@@ -65,7 +72,8 @@ export default function Chat({
           table: "messages",
         },
         (payload) => {
-          const newMsg = payload.new as Message;
+          const newMsg =
+            payload.new as Message;
 
           const belongsToChat =
             (newMsg.sender_id === currentUserId &&
@@ -80,7 +88,8 @@ export default function Chat({
           setMessages((prev) => {
             if (
               prev.some(
-                (message) => message.id === newMsg.id
+                (message) =>
+                  message.id === newMsg.id
               )
             ) {
               return prev;
@@ -98,26 +107,24 @@ export default function Chat({
       });
 
     return () => {
-      supabase.removeChannel(channel);
+      mounted = false;
+      void supabase.removeChannel(channel);
     };
   }, [currentUserId, receiverId]);
 
-  // النزول لآخر رسالة
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
   }, [messages]);
 
-  // إرسال رسالة نصية
   const sendMessage = async (
     e?: React.FormEvent
   ) => {
-    if (e) {
-      e.preventDefault();
-    }
+    e?.preventDefault();
 
-    const contentToSend = newMessage.trim();
+    const contentToSend =
+      newMessage.trim();
 
     if (!contentToSend) {
       return;
@@ -143,18 +150,73 @@ export default function Chat({
       );
 
       alert(
-        "فشل إرسال الرسالة: " + error.message
+        "فشل إرسال الرسالة: " +
+          error.message
       );
 
       setNewMessage(contentToSend);
     }
   };
 
-  // رفع صورة أو ملف صوتي
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: "image" | "audio"
   ) => {
     const files = e.target.files;
 
-    if (!files || files.length === 
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const file = files[0];
+
+    setUploading(true);
+
+    try {
+      const fileExt =
+        file.name.split(".").pop() ||
+        "bin";
+
+      const randomString =
+        Math.random()
+          .toString(36)
+          .substring(2);
+
+      const fileName =
+        `${Date.now()}_${randomString}.${fileExt}`;
+
+      const filePath =
+        `${currentUserId}/${fileName}`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from("chat_media")
+          .upload(
+            filePath,
+            file,
+            {
+              upsert: true,
+            }
+          );
+
+      if (uploadError) {
+        console.error(
+          "Upload error:",
+          uploadError
+        );
+
+        alert(
+          "فشل رفع الملف. تأكد أن Bucket chat_media موجود وأن إعداداته صحيحة."
+        );
+
+        return;
+      }
+
+      const { data } =
+        supabase.storage
+          .from("chat_media")
+          .getPublicUrl(filePath);
+
+      if (!data?.publicUrl) {
+        alert(
+         
