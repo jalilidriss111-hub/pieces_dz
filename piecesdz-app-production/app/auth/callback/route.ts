@@ -1,77 +1,20 @@
-'use client';
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
 
-import React, { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const code = searchParams.get("code");
 
-// استخدام مفاتيح البيئة العامة لـ Supabase في الواجهة (Client Side)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+  const SITE_URL = "https://pieces-dz.onrender.com";
 
-export default function Auth() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
+  if (code) {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) {
-        alert(error.message);
-      } else {
-        alert('تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.');
-      }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        alert(error.message);
-      }
+    if (!error) {
+      return NextResponse.redirect(`${SITE_URL}/settings`);
     }
-    setLoading(false);
-  };
+  }
 
-  return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', fontFamily: 'sans-serif' }}>
-      <h2 style={{ textAlign: 'center' }}>{isSignUp ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}</h2>
-      <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <input
-          type="email"
-          placeholder="البريد الإلكتروني"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-        />
-        <input
-          type="password"
-          placeholder="كلمة المرور"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ padding: '10px', background: '#007BFF', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-        >
-          {loading ? 'جاري المعالجة...' : isSignUp ? 'تسجيل' : 'دخول'}
-        </button>
-      </form>
-
-      <p style={{ textAlign: 'center', marginTop: '15px', fontSize: '14px' }}>
-        {isSignUp ? 'لديك حساب بالفعل؟' : 'ليس لديك حساب؟'}{' '}
-        <span
-          onClick={() => setIsSignUp(!isSignUp)}
-          style={{ color: '#007BFF', cursor: 'pointer', textDecoration: 'underline' }}
-        >
-          {isSignUp ? 'تسجيل الدخول' : 'أنشئ حساباً جديداً'}
-        </span>
-      </p>
-    </div>
-  );
+  return NextResponse.redirect(`${SITE_URL}/login?error=auth_failed`);
 }
