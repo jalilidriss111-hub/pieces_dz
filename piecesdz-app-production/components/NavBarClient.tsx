@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Wrench, Menu, X, Settings, Home, Search, ListChecks, Newspaper, Store, Gauge, ShieldCheck,
+  Wrench, Menu, X, Settings, Home, Search, ListChecks, Newspaper, Store, Gauge, ShieldCheck, CreditCard,
 } from "lucide-react";
 
 type Profile = {
@@ -22,6 +22,7 @@ const MENU_ITEMS = [
   { href: "/requests", label: "Mes demandes", icon: ListChecks },
   { href: "/news", label: "Nouveautés", icon: Newspaper },
   { href: "/shop", label: "Espace pro", icon: Store },
+  { href: "/pricing", label: "Abonnements", icon: CreditCard },
   { href: "/specs", label: "Spécifications techniques", icon: Gauge },
   { href: "/settings", label: "Paramètres", icon: Settings },
 ];
