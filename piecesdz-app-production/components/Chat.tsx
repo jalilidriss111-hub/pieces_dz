@@ -1,16 +1,33 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// استبدل هذه المتغيرات بمعلومات مشروعك في Supabase
-const supabaseUrl = 'YOUR_SUPABASE_URL';
-const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+// استخدام متغيرات البيئة للعميل
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export default function Chat({ currentUserId, receiverId }) {
-  const [messages, setMessages] = useState([]);
+// تعريف نوع الخصائص (Props) لتفادي أخطاء TypeScript
+interface ChatProps {
+  currentUserId: string;
+  receiverId: string;
+}
+
+interface Message {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  media_type: 'text' | 'image' | 'audio';
+  created_at: string;
+}
+
+export default function Chat({ currentUserId, receiverId }: ChatProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [uploading, setUploading] = useState(false);
-  const messagesEndRef = useRef(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchMessages();
@@ -22,11 +39,12 @@ export default function Chat({ currentUserId, receiverId }) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
+          const newMsg = payload.new as Message;
           if (
-            (payload.new.sender_id === currentUserId && payload.new.receiver_id === receiverId) ||
-            (payload.new.sender_id === receiverId && payload.new.receiver_id === currentUserId)
+            (newMsg.sender_id === currentUserId && newMsg.receiver_id === receiverId) ||
+            (newMsg.sender_id === receiverId && newMsg.receiver_id === currentUserId)
           ) {
-            setMessages((prev) => [...prev, payload.new]);
+            setMessages((prev) => [...prev, newMsg]);
           }
         }
       )
@@ -55,7 +73,7 @@ export default function Chat({ currentUserId, receiverId }) {
   };
 
   // إرسال رسالة نصية
-  const sendMessage = async (e) => {
+  const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
@@ -72,9 +90,10 @@ export default function Chat({ currentUserId, receiverId }) {
   };
 
   // رفع وإرسال صورة أو ملف صوتي
-  const handleFileUpload = async (e, type) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'audio') => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
 
     setUploading(true);
     const fileExt = file.name.split('.').pop();
@@ -101,7 +120,7 @@ export default function Chat({ currentUserId, receiverId }) {
         sender_id: currentUserId,
         receiver_id: receiverId,
         content: data.publicUrl,
-        media_type: type, // 'image' أو 'audio'
+        media_type: type,
       },
     ]);
 
@@ -116,7 +135,7 @@ export default function Chat({ currentUserId, receiverId }) {
           const isMe = msg.sender_id === currentUserId;
           return (
             <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#DCF8C6' : '#FFF', padding: '8px 12px', borderRadius: '8px', maxWidth: '70%', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-              {msg.media_type === 'text' && <p style={{ margin: 0 }}>{msg.content}</p>}
+              {msg.media_type === 'text' && <p style={{ margin: 0, color: '#000' }}>{msg.content}</p>}
               {msg.media_type === 'image' && <img src={msg.content} alt="media" style={{ maxWidth: '200px', borderRadius: '6px' }} />}
               {msg.media_type === 'audio' && <audio controls src={msg.content} style={{ width: '200px' }} />}
               <span style={{ fontSize: '10px', color: '#888', display: 'block', textAlign: 'right', marginTop: '4px' }}>
@@ -137,7 +156,7 @@ export default function Chat({ currentUserId, receiverId }) {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="اكتب رسالتك..."
-          style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc', color: '#000' }}
         />
         
         {/* زر إرسال صورة */}
