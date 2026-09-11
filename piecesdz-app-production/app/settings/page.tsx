@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Card, GhostButton, PrimaryButton } from "@/components/ui";
-import { LogOut, Ban, Store, Globe, Info, LogIn } from "lucide-react";
+import { LogOut, Ban, Store, Globe, Info, LogIn, PlayCircle } from "lucide-react";
 import Link from "next/link";
 import { translations } from "@/lib/i18n";
 
@@ -153,11 +153,31 @@ export default function SettingsPage() {
         </select>
       </Card>
 
+      {/* قسم حول الموقع مع الفيديو التعريفي */}
       <Card className="p-5 mb-4">
-        <h2 className="font-semibold text-white mb-3 flex items-center gap-2"><Info size={16} className="text-orange-400" /> {t.about}</h2>
-        <p className="text-sm text-slate-400 leading-relaxed">
+        <h2 className="font-semibold text-white mb-3 flex items-center gap-2">
+          <Info size={16} className="text-orange-400" /> {t.about}
+        </h2>
+        <p className="text-sm text-slate-400 leading-relaxed mb-4">
           {t.aboutText}
         </p>
+
+        <div className="mt-2 pt-4 border-t border-slate-800/80">
+          <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-orange-400 uppercase tracking-wider">
+            <PlayCircle size={14} />
+            <span>Vidéo de présentation</span>
+          </div>
+          <div className="relative w-full overflow-hidden rounded-xl bg-slate-950 aspect-video border border-slate-800">
+            <video
+              controls
+              preload="metadata"
+              className="w-full h-full object-contain"
+            >
+              <source src="/videos/promo.mp4" type="video/mp4" />
+              Votre navigateur ne prend pas en charge la lecture de cette vidéo.
+            </video>
+          </div>
+        </div>
       </Card>
 
       {profile && (
