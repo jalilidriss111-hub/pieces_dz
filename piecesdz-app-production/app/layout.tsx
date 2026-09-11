@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { NavBar } from "@/components/NavBar";
 
+// رابط الصورة المباشر من مجلد public
+const ogImageUrl = "https://pieces-dz.onrender.com/og-image.jpg"; 
+
 export const metadata: Metadata = {
   title: "PiecesDZ — Demandez vos pièces auto en Algérie | طلب قطع الغيار",
   description: "Connectez-vous avec les vendeurs, casses et ateliers en Algérie. Publiez votre demande de pièce auto, recevez des offres réelles et évaluez votre expérience.",
@@ -24,6 +27,20 @@ export const metadata: Metadata = {
     siteName: "PiecesDZ",
     locale: "fr_DZ",
     type: "website",
+    images: [
+      {
+        url: ogImageUrl,
+        width: 1200,
+        height: 630,
+        alt: "PiecesDZ - Plateforme de pièces auto en Algérie",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PiecesDZ — Trouvez vos pièces auto en Algérie",
+    description: "Publiez votre demande de pièce auto et recevez des offres réelles.",
+    images: [ogImageUrl],
   },
   robots: {
     index: true,
