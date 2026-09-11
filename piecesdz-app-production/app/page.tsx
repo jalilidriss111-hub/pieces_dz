@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Search, Store, MapPin, ShieldCheck } from "lucide-react";
 import { CATEGORY_TREE } from "@/lib/reference-data";
+import PricingModal from "@/components/PricingModal";
 
 export default async function HomePage() {
   const supabase = createClient();
@@ -18,7 +19,10 @@ export default async function HomePage() {
     .limit(3);
 
   return (
-    <div className="pb-12">
+    <div className="pb-12 relative">
+      {/* نافذة الاشتراكات المنبثقة */}
+      <PricingModal />
+
       <section className="relative border-b border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20">
           <div className="max-w-2xl">
