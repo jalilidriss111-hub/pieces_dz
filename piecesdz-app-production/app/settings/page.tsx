@@ -18,6 +18,20 @@ export default function SettingsPage() {
   const [hasShop, setHasShop] = useState(false);
   const [blocked, setBlocked] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lang, setLang] = useState<string>("fr");
+
+  // Load language preference from localStorage
+  useEffect(() => {
+    const savedLang = localStorage.getItem("piecesdz_lang") || "fr";
+    setLang(savedLang);
+  }, []);
+
+  const handleLanguageChange = (newLang: string) => {
+    setLang(newLang);
+    localStorage.setItem("piecesdz_lang", newLang);
+    document.documentElement.dir = newLang === "ar" ? "rtl" : "ltr";
+    document.documentElement.lang = newLang;
+  };
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -57,11 +71,10 @@ export default function SettingsPage() {
   };
 
   const signOut = async () => {
-  await supabase.auth.signOut();
-
-  router.replace("/login");
-  router.refresh();
-};
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  };
 
   if (loading || !checked) {
     return <div className="max-w-2xl mx-auto px-4 py-8 text-slate-500">Chargement...</div>;
@@ -126,21 +139,15 @@ export default function SettingsPage() {
 
       <Card className="p-5 mb-4">
         <h2 className="font-semibold text-white mb-3 flex items-center gap-2"><Globe size={16} className="text-orange-400" /> Changer la langue</h2>
-        {/* No i18n system exists in the app yet — this is a real, saved
-            preference (not a functional translation switch). Wiring actual
-            translations is a separate piece of work; flagging that here
-            rather than pretending this already changes the UI language. */}
         <select
-          defaultValue="fr"
+          value={lang}
+          onChange={(e) => handleLanguageChange(e.target.value)}
           className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 appearance-none"
         >
           <option value="fr">Français</option>
           <option value="ar">العربية</option>
           <option value="en">English</option>
         </select>
-        <p className="text-xs text-slate-600 mt-2">
-          La traduction complète de l'interface n'est pas encore implémentée — cette option sera activée dans une prochaine mise à jour.
-        </p>
       </Card>
 
       <Card className="p-5 mb-4">
