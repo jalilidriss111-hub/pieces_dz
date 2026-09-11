@@ -21,12 +21,14 @@ export default function MessagesPage() {
     }
     setCurrentUserId(user.id);
 
-    // جلب كل الرسائل التي أرسلها أو استلمها المستخدم
-    const { data: messages, error } = await supabase
+    // جلب كل الرسائل مع معالجة النوع لتجنب أخطاء TypeScript
+    const { data, error } = await supabase
       .from("messages")
       .select("*")
       .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
       .order("created_at", { ascending: false });
+
+    const messages = data as any[];
 
     if (error || !messages) {
       setLoading(false);
@@ -42,15 +44,14 @@ export default function MessagesPage() {
 
     const partnerIds = Array.from(partnerIdsSet);
 
-    // جلب معلومات هؤلاء الأشخاص (من جدول الـ users أو auth أو shops إن أمكن)
-    // هنا نقوم بتخزينهم كقائمة أساسية للمحادثات
+    // جلب معلومات هؤلاء الأشخاص أو تشكيل قائمة المحادثات
     const partnersList = partnerIds.map((id) => {
       const lastMsg = messages.find(
         (m) => m.sender_id === id || m.receiver_id === id
       );
       return {
         id,
-        name: `مستخدم (${id.substring(0, 6)}...)`, // يمكن تحسينها لاحقاً لجلب اسم التاجر أو الزبون الحقيقي
+        name: `مستخدم (${id.substring(0, 6)}...)`,
         lastMessage: lastMsg ? lastMsg.content : "",
         lastTime: lastMsg ? lastMsg.created_at : "",
       };
