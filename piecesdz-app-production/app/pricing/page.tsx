@@ -1,24 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Check, X, Star, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
 import { Card, PrimaryButton, GhostButton } from "@/components/ui";
 
 export default function PricingPage() {
-  const [showSubscriptions, setShowSubscriptions] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // قراءة المتغير البيئي فور تحميل المكون في المتصفح
-    const isEnabled = process.env.NEXT_PUBLIC_ENABLE_SUBSCRIPTIONS === "true";
-    setShowSubscriptions(isEnabled);
-    setLoading(false);
-  }, []);
-
-  if (loading) {
-    return <div className="max-w-5xl mx-auto px-4 py-12 text-center text-slate-500">Chargement...</div>;
-  }
+  // تفعيل إظهار الخطط مباشرة بشكل مضمون 100%
+  const [showSubscriptions] = useState(true);
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-12 text-slate-200 dir-rtl text-right" dir="rtl">
@@ -30,7 +19,7 @@ export default function PricingPage() {
       </div>
 
       {!showSubscriptions ? (
-        /* العرض المجاني المؤقت لمدة شهرين */
+        /* العرض المجاني المؤقت */
         <Card className="p-8 text-center border-emerald-500/30 bg-emerald-950/20 max-w-xl mx-auto">
           <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
             <Zap size={24} />
@@ -44,7 +33,7 @@ export default function PricingPage() {
           </Link>
         </Card>
       ) : (
-        /* جدول خطط الاشتراكات الثلاث بعد انقضاء المهلة المجانية */
+        /* جدول خطط الاشتراكات الثلاث */
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
           {/* 1. الخطة المجانية */}
