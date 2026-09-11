@@ -13,6 +13,13 @@ export async function NavBar() {
     profile = data;
   }
 
+  const navItems = [
+    { href: "/search", label: "Rechercher", icon: Search },
+    { href: "/requests", label: "Mes demandes", icon: ListChecks },
+    { href: "/news", label: "Nouveautés", icon: Newspaper },
+    { href: "/shop", label: "Espace pro", icon: Store },
+  ];
+
   return (
     <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
@@ -23,20 +30,18 @@ export async function NavBar() {
           <span className="font-bold text-lg tracking-tight text-white">PiecesDZ</span>
         </Link>
 
+        {/* Desktop nav — unchanged */}
         {user && (
           <nav className="hidden md:flex items-center gap-1">
-            <Link href="/search" className="px-3.5 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-900">
-              <Search size={16} /> Rechercher
-            </Link>
-            <Link href="/requests" className="px-3.5 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-900">
-              <ListChecks size={16} /> Mes demandes
-            </Link>
-            <Link href="/news" className="px-3.5 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-900">
-              <Newspaper size={16} /> Nouveautés
-            </Link>
-            <Link href="/shop" className="px-3.5 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-900">
-              <Store size={16} /> Espace pro
-            </Link>
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="px-3.5 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-900"
+              >
+                <item.icon size={16} /> {item.label}
+              </Link>
+            ))}
           </nav>
         )}
 
@@ -59,6 +64,22 @@ export async function NavBar() {
           )}
         </div>
       </div>
+
+      {/* Mobile nav — new. Bottom tab bar, visible only below md. */}
+      {user && (
+        <nav className="md:hidden flex items-stretch border-t border-slate-800 bg-slate-950/95">
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium text-slate-400 hover:text-white"
+            >
+              <item.icon size={18} />
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      )}
     </header>
   );
 }
