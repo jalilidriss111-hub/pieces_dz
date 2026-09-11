@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Wrench, Menu, X, Settings, Home, Search, ListChecks, Newspaper, Store, Gauge, ShieldCheck, CreditCard,
 } from "lucide-react";
+import { translations } from "@/lib/i18n";
 
 type Profile = {
   full_name: string | null;
@@ -14,31 +15,40 @@ type Profile = {
   avatar_url: string | null;
 } | null;
 
-// Full menu — reachable only through the hamburger drawer, never rendered
-// permanently in the header per the redesign requirement.
-const MENU_ITEMS = [
-  { href: "/", label: "Accueil", icon: Home },
-  { href: "/search", label: "Rechercher", icon: Search },
-  { href: "/requests", label: "Mes demandes", icon: ListChecks },
-  { href: "/news", label: "Nouveautés", icon: Newspaper },
-  { href: "/shop", label: "Espace pro", icon: Store },
-  { href: "/pricing", label: "Abonnements", icon: CreditCard },
-  { href: "/specs", label: "Spécifications techniques", icon: Gauge },
-  { href: "/settings", label: "Paramètres", icon: Settings },
-];
-
-// Mobile bottom bar — exactly 5 items per the redesign spec.
-const BOTTOM_ITEMS = [
-  { href: "/", label: "Accueil", icon: Home },
-  { href: "/search", label: "Rechercher", icon: Search },
-  { href: "/requests", label: "Mes demandes", icon: ListChecks },
-  { href: "/specs", label: "Spécifications", icon: Gauge },
-  { href: "/settings", label: "Paramètres", icon: Settings },
-];
-
 export function NavBarClient({ user, profile }: { user: any; profile: Profile }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
+
+  // Reading saved language preference from localStorage
+  const [currentLang, setCurrentLang] = useState("fr");
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem("piecesdz_lang") || "fr";
+    setCurrentLang(savedLang);
+  }, []);
+
+  const t = translations[currentLang as keyof typeof translations] || translations.fr;
+
+  // Dynamic Full menu — translated via i18n dictionary
+  const MENU_ITEMS = [
+    { href: "/", label: t.home, icon: Home },
+    { href: "/search", label: t.search, icon: Search },
+    { href: "/requests", label: t.requests, icon: ListChecks },
+    { href: "/news", label: t.news, icon: Newspaper },
+    { href: "/shop", label: t.proSpace, icon: Store },
+    { href: "/pricing", label: t.pricing, icon: CreditCard },
+    { href: "/specs", label: t.specs, icon: Gauge },
+    { href: "/settings", label: t.settings, icon: Settings },
+  ];
+
+  // Dynamic Mobile bottom bar — translated via i18n dictionary
+  const BOTTOM_ITEMS = [
+    { href: "/", label: t.home, icon: Home },
+    { href: "/search", label: t.search, icon: Search },
+    { href: "/requests", label: t.requests, icon: ListChecks },
+    { href: "/specs", label: t.specs, icon: Gauge },
+    { href: "/settings", label: t.settings, icon: Settings },
+  ];
 
   return (
     <>
@@ -61,7 +71,7 @@ export function NavBarClient({ user, profile }: { user: any; profile: Profile })
 
           <Link
             href="/settings"
-            aria-label="Paramètres"
+            aria-label={t.settings}
             className="w-9 h-9 rounded-lg border border-slate-700 flex items-center justify-center text-slate-300 hover:border-slate-500 hover:text-white transition-colors relative"
           >
             <Settings size={18} />
@@ -149,7 +159,7 @@ export function NavBarClient({ user, profile }: { user: any; profile: Profile })
                 }`}
               >
                 <ShieldCheck size={16} />
-                Politique de confidentialité
+                {t.privacy}
               </Link>
             </div>
           </div>
