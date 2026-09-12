@@ -1,7 +1,3 @@
-هذان هما التعديلان الكاملان للملفين، منظّمان ومتوافقان مع تصميم منصتك:
-### 1. تعديل صفحة الإعدادات (SettingsPage.tsx)
-تمت إضافة إمكانية تعديل **الاسم الكامل** و**تغيير الصورة الشخصية** مع رفعها مباشرة إلى Supabase Storage.
-```tsx
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
