@@ -41,8 +41,7 @@ export default function SettingsPage() {
 
     setUserId(user.id);
 
-    const { data: profileData } = await supabase
-      .from("profiles")
+    const { data: profileData } = await (supabase.from("profiles") as any)
       .select("*")
       .eq("id", user.id)
       .single();
@@ -69,7 +68,7 @@ export default function SettingsPage() {
     setSaving(true);
     setMessage(null);
 
-    const { error } = await supabase.from("profiles").upsert({
+    const { error } = await (supabase.from("profiles") as any).upsert({
       id: userId,
       full_name: fullName,
       avatar_url: avatarUrl,
