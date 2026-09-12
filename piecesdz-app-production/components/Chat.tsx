@@ -60,8 +60,7 @@ export default function Chat({
 
     if (shopId) {
       const fetchShopOwner = async () => {
-        const { data, error } = await supabase
-          .from("shops")
+        const { data, error } = await (supabase.from("shops") as any)
           .select("owner_id, user_id")
           .eq("id", shopId)
           .maybeSingle();
@@ -86,8 +85,7 @@ export default function Chat({
     if (!resolvedReceiverId && (shopId || receiverId)) return;
 
     const fetchMessages = async () => {
-      let query = supabase
-        .from("messages")
+      let query = (supabase.from("messages") as any)
         .select("*")
         .order("created_at", { ascending: true });
 
@@ -171,7 +169,7 @@ export default function Chat({
   const sendMessage = async (content?: string, mediaUrl?: string, mediaType?: string) => {
     if (!content?.trim() && !mediaUrl) return;
 
-    const { error } = await supabase.from("messages").insert([
+    const { error } = await (supabase.from("messages") as any).insert([
       {
         sender_id: currentUserId,
         receiver_id: resolvedReceiverId || null,
