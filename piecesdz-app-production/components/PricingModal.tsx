@@ -70,7 +70,7 @@ export default function PricingModal({ isOpen = true, onClose }: PricingModalPro
               </h3>
               <p className="text-[11px] text-slate-400 mb-3">للمحلات والورشات النشطة</p>
               <div className="text-xl font-bold text-orange-400 mb-4">
-                1,000 <span className="text-xs text-slate-400 font-normal">دج / شهرياً</span>
+                0.00 <span className="text-xs text-slate-400 font-normal">دج / شهرياً</span>
               </div>
               <ul className="space-y-2.5 text-xs text-slate-300 mb-6">
                 <li className="flex items-center gap-2"><Check size={14} className="text-orange-400 shrink-0" /> ردود غير محدودة على الطلبات</li>
@@ -93,7 +93,7 @@ export default function PricingModal({ isOpen = true, onClose }: PricingModalPro
               <h3 className="text-base font-bold text-amber-400 mb-1">الذهبي</h3>
               <p className="text-[11px] text-slate-400 mb-3">للمحلات الكبرى (سنوي)</p>
               <div className="text-xl font-bold text-white mb-4">
-                15,000 <span className="text-xs text-slate-400 font-normal">دج / سنوياً</span>
+                0.00 <span className="text-xs text-slate-400 font-normal">دج / سنوياً</span>
               </div>
               <ul className="space-y-2.5 text-xs text-slate-300 mb-6">
                 <li className="flex items-center gap-2"><Check size={14} className="text-amber-400 shrink-0" /> كل ميزات الخطة الفضية</li>
