@@ -7,7 +7,7 @@ import { Card, PrimaryButton, GhostButton } from "@/components/ui";
 
 export default function PricingPage() {
   // تفعيل إظهار الخطط مباشرة بشكل مضمون 100%
-  const [showSubscriptions] = useState(true);
+  const [showSubscriptions] = useState(false);
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-12 text-slate-200 dir-rtl text-right" dir="rtl">
