@@ -43,22 +43,22 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
   // رفع الملفات إلى Supabase Storage
   const uploadFile = async (file: Blob | File, folder: string): Promise<string | null> => {
     try {
-      const ext = file.type.split("/")[1] || "png";
+      const ext = file.type.includes("webm") ? "webm" : file.type.split("/")[1] || "jpg";
       const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-      
+
       const { data, error } = await supabase.storage
         .from("chat-media")
         .upload(fileName, file, { cacheControl: "3600", upsert: true });
 
       if (error) {
-        console.error("Storage error:", error);
+        console.error("خطأ في رفع الملف:", error.message);
         return null;
       }
 
       const { data: publicData } = supabase.storage.from("chat-media").getPublicUrl(data.path);
       return publicData.publicUrl;
     } catch (err) {
-      console.error("Upload failed:", err);
+      console.error("فشل الرفع:", err);
       return null;
     }
   };
@@ -132,7 +132,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     setSending(false);
   };
 
-  // رفع وإرسال صورة من الهاتف
+  // رفع وإرسال صورة مباشرة من الهاتف
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -147,6 +147,8 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         content: imageUrl,
         media_type: "image",
       });
+    } else {
+      alert("تعذر إرسال الصورة. تأكد من إعدادات Supabase Storage.");
     }
 
     setSending(false);
@@ -157,16 +159,17 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      mediaRecorderRef.current.ondataavailable = (event) => {
+      mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
-      mediaRecorderRef.current.start();
+      mediaRecorder.start(100);
       setIsRecording(true);
       setRecordingTime(0);
 
@@ -174,44 +177,52 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      alert("يرجى إعطاء الإذن لاستخدام المايكروفون.");
+      alert("يرجى إعطاء إذن المايكروفون في المتصفح للإرسال الصوتي.");
     }
   };
 
-  // إيقاف وإرسال الصوت
+  // إيقاف وإرسال التسجيل الصوتي
   const stopAndSendRecording = () => {
-    if (!mediaRecorderRef.current) return;
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
 
-    mediaRecorderRef.current.onstop = async () => {
-      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    recorder.onstop = async () => {
       setSending(true);
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
 
-      const audioUrl = await uploadFile(audioBlob, "voice");
-      if (audioUrl) {
-        await (supabase.from("messages") as any).insert({
-          sender_id: currentUserId,
-          receiver_id: receiverId,
-          content: audioUrl,
-          media_type: "audio",
-        });
+      if (audioBlob.size > 0) {
+        const audioUrl = await uploadFile(audioBlob, "voice");
+        if (audioUrl) {
+          await (supabase.from("messages") as any).insert({
+            sender_id: currentUserId,
+            receiver_id: receiverId,
+            content: audioUrl,
+            media_type: "audio",
+          });
+        } else {
+          alert("تعذر إرسال التسجيل الصوتي.");
+        }
       }
 
       setSending(false);
+      audioChunksRef.current = [];
     };
 
-    mediaRecorderRef.current.stop();
-    mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+    recorder.stop();
+    recorder.stream.getTracks().forEach((track) => track.stop());
     setIsRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
   // إلغاء التسجيل الصوتي
   const cancelRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+    const recorder = mediaRecorderRef.current;
+    if (recorder) {
+      recorder.stop();
+      recorder.stream.getTracks().forEach((track) => track.stop());
     }
     setIsRecording(false);
+    audioChunksRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
@@ -226,8 +237,8 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
 
   return (
     <div className="flex flex-col h-full bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
-      {/* عرض الرسائل */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px] custom-scrollbar">
+      {/* منطقة الرسائل */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]">
         {messages.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-xs">
             لا توجد رسائل بينكما بعد. ابدأ المحادثة الآن!
@@ -244,26 +255,23 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
                       : "bg-slate-800 text-slate-200 border border-slate-700/60 rounded-bl-none"
                   }`}
                 >
-                  {/* رسالة نصية */}
                   {msg.media_type === "text" && (
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                   )}
 
-                  {/* رسالة صورة */}
                   {msg.media_type === "image" && (
                     <div className="rounded-lg overflow-hidden my-1">
                       <img
                         src={msg.content}
-                        alt="مرفق صورة"
+                        alt="صورة مرفقة"
                         className="max-h-60 w-full object-cover rounded-lg"
                       />
                     </div>
                   )}
 
-                  {/* رسالة صوتية */}
                   {msg.media_type === "audio" && (
                     <div className="py-1">
-                      <audio controls src={msg.content} className="max-w-xs w-full h-9" />
+                      <audio controls src={msg.content} className="max-w-xs w-full h-10" />
                     </div>
                   )}
 
@@ -285,8 +293,8 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* شريط الإدخال والتسجيل */}
-      <div className="p-3 bg-slate-950/80 border-t border-slate-800">
+      {/* شريط الإدخال */}
+      <div className="p-3 bg-slate-950 border-t border-slate-800">
         {isRecording ? (
           <div className="flex items-center justify-between gap-3 bg-rose-500/10 border border-rose-500/30 p-2.5 rounded-xl">
             <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold animate-pulse">
@@ -297,21 +305,22 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
               <button
                 onClick={cancelRecording}
                 className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+                title="إلغاء"
               >
                 <Trash2 size={16} />
               </button>
               <button
                 onClick={stopAndSendRecording}
-                className="px-3 py-1.5 rounded-lg bg-rose-500 text-white text-xs font-bold flex items-center gap-1"
+                disabled={sending}
+                className="px-3 py-1.5 rounded-lg bg-orange-500 text-white text-xs font-bold flex items-center gap-1 hover:bg-orange-600 transition-colors"
               >
-                <Square size={14} />
-                <span>إرسال</span>
+                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                <span>إرسال الصوت</span>
               </button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-            {/* زر إضافة صورة من الهاتف */}
             <input
               type="file"
               accept="image/*"
@@ -324,21 +333,21 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
               onClick={() => fileInputRef.current?.click()}
               disabled={sending}
               className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-orange-400 transition-colors shrink-0"
+              title="إرسال صورة من الهاتف"
             >
               <ImageIcon size={18} />
             </button>
 
-            {/* زر المايك للبدء بالصوت */}
             <button
               type="button"
               onClick={startRecording}
               disabled={sending}
               className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-orange-400 transition-colors shrink-0"
+              title="تسجيل صوتي"
             >
               <Mic size={18} />
             </button>
 
-            {/* حقل كتابة النص */}
             <input
               type="text"
               placeholder="اكتب رسالتك..."
@@ -347,7 +356,6 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
               className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors"
             />
 
-            {/* زر الإرسال */}
             <button
               type="submit"
               disabled={sending || !newMessage.trim()}
