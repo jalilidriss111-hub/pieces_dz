@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Card, GhostButton, PrimaryButton } from "@/components/ui";
-import { LogOut, Ban, Store, Globe, Info, LogIn, PlayCircle } from "lucide-react";
+import { LogOut, Ban, Store, Globe, Info, LogIn, PlayCircle, Camera, Edit3, Check } from "lucide-react";
 import Link from "next/link";
 import { translations } from "@/lib/i18n";
 
@@ -19,7 +19,13 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [lang, setLang] = useState<string>("fr");
 
-  // Load language preference from localStorage
+  // حالات تعديل البروفايل
+  const [isEditing, setIsEditing] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     const savedLang = localStorage.getItem("piecesdz_lang") || "fr";
     setLang(savedLang);
@@ -30,7 +36,6 @@ export default function SettingsPage() {
     localStorage.setItem("piecesdz_lang", newLang);
     document.documentElement.dir = newLang === "ar" ? "rtl" : "ltr";
     document.documentElement.lang = newLang;
-    // Reload page to apply new translations instantly across components
     window.location.reload();
   };
 
@@ -45,7 +50,11 @@ export default function SettingsPage() {
     }
 
     const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-    setProfile(profileData);
+    if (profileData) {
+      setProfile(profileData);
+      setFullName(profileData.full_name || "");
+      setAvatarUrl(profileData.avatar_url || "");
+    }
 
     const { data: shopData } = await supabase.from("shops").select("id").eq("owner_id", user.id).single();
     setHasShop(!!shopData);
@@ -61,6 +70,60 @@ export default function SettingsPage() {
   }, [supabase]);
 
   useEffect(() => { load(); }, [load]);
+
+  // رفع الصورة الشخصية
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `avatars/${profile.id}_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      if (publicUrlData?.publicUrl) {
+        setAvatarUrl(publicUrlData.publicUrl);
+      }
+    } catch (err: any) {
+      alert("فشل رفع الصورة: " + (err.message || "حدث خطأ ما"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // حفظ التعديلات في قاعدة البيانات
+  const handleSaveProfile = async () => {
+    if (!profile) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          full_name: fullName.trim(),
+          avatar_url: avatarUrl,
+        })
+        .eq("id", profile.id);
+
+      if (error) throw error;
+
+      setProfile({ ...profile, full_name: fullName.trim(), avatar_url: avatarUrl });
+      setIsEditing(false);
+    } catch (err: any) {
+      alert("حدث خطأ أثناء حفظ البيانات: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const unblock = async (shopId: string) => {
     await fetch("/api/blocked-shops", {
@@ -89,17 +152,84 @@ export default function SettingsPage() {
 
       {profile ? (
         <>
-          <Card className="p-5 mb-4 flex items-center gap-4">
-            {profile.avatar_url ? (
-              <Image src={profile.avatar_url} alt={profile.full_name ?? ""} width={56} height={56} className="rounded-full" />
-            ) : (
-              <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-lg font-semibold text-slate-300">
-                {(profile.full_name ?? profile.email ?? "?").charAt(0).toUpperCase()}
+          {/* كارت الملف الشخصي القابل للتعديل */}
+          <Card className="p-5 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-white flex items-center gap-2">
+                الملف الشخصي
+              </h2>
+              {!isEditing ? (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-1.5 text-xs text-orange-400 bg-orange-500/10 hover:bg-orange-500/20 px-3 py-1.5 rounded-lg border border-orange-500/20 font-medium transition"
+                >
+                  <Edit3 size={14} /> تعديل
+                </button>
+              ) : (
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 text-xs text-slate-900 bg-orange-500 hover:bg-orange-400 px-3 py-1.5 rounded-lg font-semibold transition disabled:opacity-50"
+                >
+                  <Check size={14} /> {saving ? "جاري الحفظ..." : "حفظ"}
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              {/* صورة البروفايل */}
+              <div className="relative group">
+                {avatarUrl ? (
+                  <Image
+                    src={avatarUrl}
+                    alt={fullName || ""}
+                    width={72}
+                    height={72}
+                    className="rounded-full object-cover w-18 h-18 border-2 border-slate-700"
+                  />
+                ) : (
+                  <div className="w-18 h-18 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-xl font-bold text-slate-300">
+                    {(fullName || profile.email || "?").charAt(0).toUpperCase()}
+                  </div>
+                )}
+
+                {isEditing && (
+                  <label className="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center cursor-pointer opacity-90 hover:opacity-100 transition">
+                    <Camera size={18} className="text-white mb-0.5" />
+                    <span className="text-[10px] text-slate-200">
+                      {uploading ? "..." : "تغيير"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      disabled={uploading}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
-            )}
-            <div>
-              <p className="font-semibold text-white">{profile.full_name ?? "—"}</p>
-              <p className="text-sm text-slate-500">{profile.email}</p>
+
+              {/* بيانات الاسم والايميل */}
+              <div className="flex-1 w-full text-center sm:text-right">
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <label className="text-xs text-slate-400 block">الاسم الكامل:</label>
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="أدخل اسمك الكامل"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <p className="font-bold text-white text-lg">{profile.full_name || "بدون اسم"}</p>
+                    <p className="text-xs text-slate-500">{profile.email}</p>
+                  </>
+                )}
+              </div>
             </div>
           </Card>
 
@@ -153,7 +283,6 @@ export default function SettingsPage() {
         </select>
       </Card>
 
-      {/* قسم حول الموقع مع الفيديو التعريفي */}
       <Card className="p-5 mb-4">
         <h2 className="font-semibold text-white mb-3 flex items-center gap-2">
           <Info size={16} className="text-orange-400" /> {t.about}
@@ -170,6 +299,7 @@ export default function SettingsPage() {
           <div className="relative w-full overflow-hidden rounded-xl bg-slate-950 aspect-video border border-slate-800">
             <video
               controls
+              playsInline
               preload="metadata"
               className="w-full h-full object-contain"
             >
