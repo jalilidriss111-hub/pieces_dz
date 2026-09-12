@@ -14,6 +14,12 @@ interface MessageRow {
   created_at: string;
 }
 
+interface ProfileRow {
+  id: string;
+  full_name?: string;
+  avatar_url?: string;
+}
+
 interface Conversation {
   id: string;
   name: string;
@@ -98,10 +104,10 @@ export default function MessagesPage() {
       .select("id, full_name, avatar_url")
       .in("id", partnerIds);
 
-    const profilesMap = new Map<string, { full_name?: string; avatar_url?: string }>();
-    if (profiles) {
-      profiles.forEach((p) => profilesMap.set(p.id, p));
-    }
+    const typedProfiles = (profiles || []) as ProfileRow[];
+
+    const profilesMap = new Map<string, ProfileRow>();
+    typedProfiles.forEach((p) => profilesMap.set(p.id, p));
 
     // 5. بناء قائمة المحادثات النهائية
     const partnersList: Conversation[] = partnerIds.map((partnerId) => {
