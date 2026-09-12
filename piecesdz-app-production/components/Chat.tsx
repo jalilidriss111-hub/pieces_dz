@@ -52,7 +52,7 @@ export default function Chat({
     scrollToBottom();
   }, [messages]);
 
-  // 1. جلب ID المستخدم الحالي من Supabase Auth إذا لم يُمرّر
+  // 1. جلب ID المستخدم الحالي تلقائياً إذا لم يُمرّر
   useEffect(() => {
     const fetchCurrentUser = async () => {
       if (currentUserId) {
@@ -96,7 +96,7 @@ export default function Chat({
     }
   }, [shopId, receiverId]);
 
-  // 3. جلب الرسائل والتحديث الفوري
+  // 3. جلب الرسائل والتحديث الفوري (Realtime)
   useEffect(() => {
     if (!activeUserId) return;
 
@@ -145,12 +145,19 @@ export default function Chat({
     };
   }, [chatRoomId, resolvedReceiverId, activeUserId]);
 
-  // 4. رفع الملفات لباكت chat_media
+  // 4. رفع الملفات إلى Supabase Storage مع توافقية الصغ على كل الأجهزة
   const uploadFile = async (file: Blob | File, folder: string): Promise<string | null> => {
     try {
       setIsUploading(true);
-      const fileType = file.type || (folder === "voice" ? "audio/webm" : "image/jpeg");
-      const ext = fileType.split("/")[1]?.split(";")[0] || (folder === "voice" ? "webm" : "jpg");
+      const fileType = file.type || (folder === "voice" ? "audio/mp4" : "image/jpeg");
+
+      let ext = "bin";
+      if (folder === "voice") {
+        ext = fileType.includes("mp4") ? "m4a" : fileType.includes("aac") ? "aac" : "webm";
+      } else {
+        ext = fileType.split("/")[1]?.split(";")[0] || "jpg";
+      }
+
       const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
 
       const { data, error } = await supabase.storage
@@ -181,7 +188,7 @@ export default function Chat({
     }
   };
 
-  // 5. إرسال الرسائل مع طباعة الخطأ الصريح
+  // 5. إرسال الرسائل
   const sendMessage = async (content?: string, mediaUrl?: string, mediaType?: string) => {
     if (!content?.trim() && !mediaUrl) return;
 
@@ -205,7 +212,7 @@ export default function Chat({
 
     if (error) {
       console.error("خطأ أثناء إرسال الرسالة:", error);
-      alert(`خطأ Supabase عند الإرسال: ${error.message || error.details || "تأكد من إعدادات RLS بجدول الرسائل"}`);
+      alert(`خطأ عند الإرسال: ${error.message || "تأكد من إعدادات RLS"}`);
     } else {
       setText("");
     }
@@ -226,10 +233,21 @@ export default function Chat({
     e.target.value = "";
   };
 
+  // 6. تسجيل الصوت الذكي متوافق مع Safari (iOS) و Chrome (Android)
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+
+      let options: MediaRecorderOptions = {};
+      if (MediaRecorder.isTypeSupported("audio/mp4")) {
+        options = { mimeType: "audio/mp4" };
+      } else if (MediaRecorder.isTypeSupported("audio/aac")) {
+        options = { mimeType: "audio/aac" };
+      } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+        options = { mimeType: "audio/webm" };
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -240,7 +258,8 @@ export default function Chat({
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const mimeType = mediaRecorder.mimeType || "audio/mp4";
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         const voiceUrl = await uploadFile(audioBlob, "voice");
         if (voiceUrl) {
           await sendMessage("", voiceUrl, "voice");
@@ -278,7 +297,7 @@ export default function Chat({
         )}
       </div>
 
-      {/* Messages List */}
+      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/50">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-slate-500 text-xs">
@@ -333,7 +352,7 @@ export default function Chat({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Control Bar */}
+      {/* Input Bar */}
       <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
         <label className="p-2.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition cursor-pointer" title="إرفاق ملف أو صورة">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -351,7 +370,7 @@ export default function Chat({
               ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
               : "hover:bg-slate-800 text-slate-400 hover:text-slate-200"
           }`}
-          title={isRecording ? "إيقاف الإرسال" : "تسجيل صوتي"}
+          title={isRecording ? "إيقاف والإرسال" : "تسجيل صوتي"}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
