@@ -1,51 +1,47 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import Chat from "@/components/Chat";
-import { MessageSquare, User, ArrowLeft, Search, Loader2 } from "lucide-react";
+import {
+  User,
+  Settings,
+  Save,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Globe,
+  ShieldCheck,
+  Info,
+  LogOut,
+  Upload,
+  LogIn,
+} from "lucide-react";
 
-interface MessageRow {
-  id: string;
-  sender_id: string;
-  receiver_id: string;
-  content: string;
-  media_type: "text" | "image" | "audio";
-  created_at: string;
-}
-
-interface ProfileRow {
-  id: string;
-  full_name?: string;
-  avatar_url?: string;
-}
-
-interface Conversation {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-  lastMessage: string;
-  lastTime: string;
-}
-
-export default function MessagesPage() {
+export default function SettingsPage() {
   const supabase = createClient();
 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  
-  const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
-  const [activePartnerName, setActivePartnerName] = useState<string>("");
-  const [activePartnerAvatar, setActivePartnerAvatar] = useState<string | undefined>(undefined);
-  
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const loadUserAndConversations = useCallback(async () => {
+  const [activeTab, setActiveTab] = useState<"profile" | "account" | "language" | "about">("profile");
+
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+
+  const [fullName, setFullName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [phone, setPhone] = useState("");
+  const [wilaya, setWilaya] = useState("");
+
+  const [language, setLanguage] = useState<"ar" | "fr" | "en">("ar");
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const loadProfile = useCallback(async () => {
     setLoading(true);
 
-    // 1. جلب المستخدم الحالي
     const {
       data: { user },
       error: userError,
@@ -56,265 +52,408 @@ export default function MessagesPage() {
       return;
     }
 
-    setCurrentUserId(user.id);
+    setUserId(user.id);
+    setUserEmail(user.email || "");
 
-    // 2. جلب الرسائل (المرسلة والمستقبلة)
-    const [sentRes, receivedRes] = await Promise.all([
-      supabase
-        .from("messages")
-        .select("*")
-        .eq("sender_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("messages")
-        .select("*")
-        .eq("receiver_id", user.id)
-        .order("created_at", { ascending: false }),
-    ]);
+    const provider = user.app_metadata?.provider;
+    const isGoogle = provider === "google" || user.identities?.some((i) => i.provider === "google");
+    setIsGoogleConnected(!!isGoogle);
 
-    const sentMessages = (sentRes.data || []) as MessageRow[];
-    const receivedMessages = (receivedRes.data || []) as MessageRow[];
-    const allMessages = [...sentMessages, ...receivedMessages];
+    const { data: profileData } = await (supabase.from("profiles") as any)
+      .select("*")
+      .eq("id", user.id)
+      .single();
 
-    // 3. استخراج الأشخاص وآخر رسالة لكل شخص
-    const partnerMap = new Map<string, MessageRow>();
-
-    for (const msg of allMessages) {
-      const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
-      if (!partnerId || partnerId === user.id) continue;
-
-      const existing = partnerMap.get(partnerId);
-      if (!existing || new Date(msg.created_at).getTime() > new Date(existing.created_at).getTime()) {
-        partnerMap.set(partnerId, msg);
-      }
+    if (profileData) {
+      setFullName(profileData.full_name || "");
+      setAvatarUrl(profileData.avatar_url || "");
+      setPhone(profileData.phone || "");
+      setWilaya(profileData.wilaya || "");
     }
 
-    const partnerIds = Array.from(partnerMap.keys());
-
-    if (partnerIds.length === 0) {
-      setConversations([]);
-      setFilteredConversations([]);
-      setLoading(false);
-      return;
-    }
-
-    // 4. جلب البروفايلات (الأسماء والصور) الخاصة بكل الأشخاص
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", partnerIds);
-
-    const typedProfiles = (profiles || []) as ProfileRow[];
-
-    const profilesMap = new Map<string, ProfileRow>();
-    typedProfiles.forEach((p) => profilesMap.set(p.id, p));
-
-    // 5. بناء قائمة المحادثات النهائية
-    const partnersList: Conversation[] = partnerIds.map((partnerId) => {
-      const lastMsg = partnerMap.get(partnerId)!;
-      const profile = profilesMap.get(partnerId);
-
-      const formattedName =
-        profile?.full_name?.trim() || `مستخدم (${partnerId.substring(0, 6)})`;
-
-      return {
-        id: partnerId,
-        name: formattedName,
-        avatarUrl: profile?.avatar_url || undefined,
-        lastMessage:
-          lastMsg.media_type === "text"
-            ? lastMsg.content
-            : lastMsg.media_type === "image"
-            ? "📷 صورة"
-            : "🎤 تسجيل صوتي",
-        lastTime: lastMsg.created_at,
-      };
-    });
-
-    // ترتيب المحادثات من الأحدث للأقدم
-    partnersList.sort(
-      (a, b) => new Date(b.lastTime).getTime() - new Date(a.lastTime).getTime()
-    );
-
-    setConversations(partnersList);
-    setFilteredConversations(partnersList);
     setLoading(false);
   }, [supabase]);
 
   useEffect(() => {
-    loadUserAndConversations();
-  }, [loadUserAndConversations]);
+    loadProfile();
+  }, [loadProfile]);
 
-  // تصفية المحادثات عند البحث
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredConversations(conversations);
-    } else {
-      setFilteredConversations(
-        conversations.filter((c) =>
-          c.name.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      );
+  const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+
+    setUploadingAvatar(true);
+    setMessage(null);
+
+    try {
+      const ext = file.type.split("/")[1] || "jpg";
+      const filePath = `avatars/${userId}_${Date.now()}.${ext}`;
+
+      const { data, error } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true, contentType: file.type });
+
+      if (error) throw error;
+
+      const { data: publicData } = supabase.storage.from("avatars").getPublicUrl(data.path);
+      setAvatarUrl(publicData.publicUrl);
+      setMessage({ type: "success", text: "تم رفع الصورة من هاتفك بنجاح! اضغط حفظ التغييرات." });
+    } catch (err) {
+      setMessage({ type: "error", text: "حدث خطأ أثناء رفع الصورة." });
+    } finally {
+      setUploadingAvatar(false);
     }
-  }, [searchQuery, conversations]);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+
+    setSaving(true);
+    setMessage(null);
+
+    const { error } = await (supabase.from("profiles") as any).upsert({
+      id: userId,
+      full_name: fullName,
+      avatar_url: avatarUrl,
+      phone,
+      wilaya,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      setMessage({ type: "error", text: "حدث خطأ أثناء حفظ البيانات." });
+    } else {
+      setMessage({ type: "success", text: "تم حفظ البيانات بنجاح!" });
+    }
+
+    setSaving(false);
+  };
+
+  const handleGoogleAuth = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/";
+  };
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
+      <div className="max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
         <Loader2 className="animate-spin text-orange-500" size={32} />
-        <p className="text-sm">جاري تحميل المحادثات...</p>
+        <p className="text-sm">جاري جلب إعدادات حسابك...</p>
       </div>
     );
   }
 
-  if (!currentUserId) {
+  // الواجهة التفاعلية المسؤولة عن تنبيه تسجل الدخول
+  if (!userId) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-2xl mt-8">
-        <p className="text-base font-medium">الرجاء تسجيل الدخول لعرض رسائلك ومحادثاتك.</p>
+      <div className="max-w-xl mx-auto px-4 py-16 text-center bg-slate-900 border border-slate-800 rounded-2xl mt-12 shadow-2xl space-y-5">
+        <div className="w-14 h-14 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-500 flex items-center justify-center mx-auto">
+          <User size={28} />
+        </div>
+        <div>
+          <h2 className="text-lg sm:text-xl font-bold text-white">أنت غير مسجل الدخول حالياً</h2>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-md mx-auto">
+            يرجى تسجيل الدخول للوصول إلى إعدادات ملفك الشخصي وإمكانية مراسلة البائعين والموردين.
+          </p>
+        </div>
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            onClick={handleGoogleAuth}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-white text-slate-900 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all hover:bg-slate-100 shadow-md"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+            <span>التسجيل المباشر عبر Google</span>
+          </button>
+          <a
+            href="/login"
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-500/20"
+          >
+            <LogIn size={16} />
+            <span>تسجيل الدخول / إنشاء حساب</span>
+          </a>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-      {/* العنوان الرئيسية */}
-      <div className="flex items-center gap-3 mb-6">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+      <div className="flex items-center gap-3 mb-8">
         <div className="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500">
-          <MessageSquare size={22} />
+          <Settings size={24} />
         </div>
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white">رسائلي ومحادثاتي</h1>
-          <p className="text-xs text-slate-400 mt-0.5">تواصل مباشرة مع المشترين والبائعين</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-white">إعدادات الحساب</h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">تعديل ملفك الشخصي والأمان</p>
         </div>
       </div>
 
-      {/* حاوية المحادثات والشات */}
-      <div className="grid grid-cols-1 md:grid-cols-12 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden min-h-[650px] shadow-xl">
-        
-        {/* قائمة المحادثات (الجانب الأيمن) */}
-        <div
-          className={`md:col-span-4 lg:col-span-4 border-l border-slate-800 flex flex-col bg-slate-950/40 ${
-            activePartnerId ? "hidden md:flex" : "flex"
-          }`}
-        >
-          {/* شريط البحث */}
-          <div className="p-4 border-b border-slate-800">
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-              <input
-                type="text"
-                placeholder="بحث في المحادثات..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-3 pr-9 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors"
-              />
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <div className="md:col-span-4 lg:col-span-3 flex flex-col gap-2">
+          <button
+            onClick={() => setActiveTab("profile")}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all text-right ${
+              activeTab === "profile"
+                ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                : "bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800"
+            }`}
+          >
+            <User size={18} />
+            <span>الملف الشخصي</span>
+          </button>
 
-          {/* قائمة الأشخاص */}
-          <div className="p-3 flex flex-col gap-1.5 overflow-y-auto max-h-[580px] custom-scrollbar flex-1">
-            {filteredConversations.length === 0 ? (
-              <div className="text-center py-12 px-4">
-                <p className="text-sm text-slate-500 font-medium">لا توجد محادثات.</p>
-              </div>
-            ) : (
-              filteredConversations.map((partner) => {
-                const isActive = activePartnerId === partner.id;
-                return (
-                  <button
-                    key={partner.id}
-                    onClick={() => {
-                      setActivePartnerId(partner.id);
-                      setActivePartnerName(partner.name);
-                      setActivePartnerAvatar(partner.avatarUrl);
-                    }}
-                    className={`w-full text-right p-3 rounded-xl transition-all flex items-center justify-between gap-3 ${
-                      isActive
-                        ? "bg-orange-500/10 border border-orange-500/30 text-white"
-                        : "hover:bg-slate-800/60 text-slate-300 border border-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden min-w-0">
-                      {/* الصورة الشخصية */}
-                      <div className="w-11 h-11 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
-                        {partner.avatarUrl ? (
-                          <img
-                            src={partner.avatarUrl}
-                            alt={partner.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <User size={20} className="text-orange-400" />
-                        )}
-                      </div>
+          <button
+            onClick={() => setActiveTab("account")}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all text-right ${
+              activeTab === "account"
+                ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                : "bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800"
+            }`}
+          >
+            <ShieldCheck size={18} />
+            <span>الأمان وحساب Google</span>
+          </button>
 
-                      {/* الاسم وآخر رسالة */}
-                      <div className="overflow-hidden text-right min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <p className="text-sm font-bold text-white truncate">{partner.name}</p>
-                          <span className="text-[10px] text-slate-500 shrink-0">
-                            {new Date(partner.lastTime).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 truncate">{partner.lastMessage}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
+          <button
+            onClick={() => setActiveTab("language")}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all text-right ${
+              activeTab === "language"
+                ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                : "bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800"
+            }`}
+          >
+            <Globe size={18} />
+            <span>تغيير اللغة</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("about")}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all text-right ${
+              activeTab === "about"
+                ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                : "bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800"
+            }`}
+          >
+            <Info size={18} />
+            <span>حول المنصة</span>
+          </button>
         </div>
 
-        {/* نافذة الشات (الجانب الأيسر) */}
-        <div
-          className={`md:col-span-8 lg:col-span-8 flex flex-col justify-between bg-slate-900 ${
-            !activePartnerId ? "hidden md:flex" : "flex"
-          }`}
-        >
-          {activePartnerId ? (
-            <div className="flex flex-col h-full">
-              {/* هيدر الشات للموبايل (مع زر عودة) */}
-              <div className="md:hidden p-3 border-b border-slate-800 flex items-center gap-3 bg-slate-950/60">
-                <button
-                  onClick={() => setActivePartnerId(null)}
-                  className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
-                >
-                  <ArrowLeft size={18} className="rotate-180" />
-                </button>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center">
-                    {activePartnerAvatar ? (
-                      <img src={activePartnerAvatar} alt="" className="w-full h-full object-cover" />
+        <div className="md:col-span-8 lg:col-span-9 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+          {message && (
+            <div
+              className={`mb-6 p-4 rounded-xl border flex items-center gap-3 text-xs sm:text-sm font-medium ${
+                message.type === "success"
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+              }`}
+            >
+              {message.type === "success" ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+              <span>{message.text}</span>
+            </div>
+          )}
+
+          {activeTab === "profile" && (
+            <form onSubmit={handleSaveProfile} className="space-y-6">
+              <h2 className="text-base font-bold text-white mb-4 border-b border-slate-800 pb-3">تعديل ملفك الشخصي</h2>
+
+              <div className="flex flex-col sm:flex-row items-center gap-5 pb-4 border-b border-slate-800/80">
+                <div className="w-20 h-20 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={36} className="text-orange-400" />
+                  )}
+                </div>
+
+                <div className="flex-1 w-full space-y-2 text-center sm:text-right">
+                  <span className="block text-xs font-semibold text-slate-300">الصورة الشخصية</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={avatarInputRef}
+                    onChange={handleAvatarFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-white font-medium flex items-center justify-center gap-2 transition-all w-full sm:w-auto"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 size={14} className="animate-spin text-orange-500" />
                     ) : (
-                      <User size={16} className="text-orange-400" />
+                      <Upload size={14} className="text-orange-400" />
                     )}
-                  </div>
-                  <span className="text-sm font-bold text-white">{activePartnerName}</span>
+                    <span>رفع صورة من هاتفك</span>
+                  </button>
                 </div>
               </div>
 
-              {/* مكون المحادثة الأصلي */}
-              <div className="flex-1 p-2 sm:p-4">
-                <Chat currentUserId={currentUserId} receiverId={activePartnerId} />
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-300">الاسم الكامل</label>
+                <input
+                  type="text"
+                  placeholder="أدخل اسمك الكامل..."
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-orange-500 transition-colors"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-300">رقم الهاتف</label>
+                  <input
+                    type="tel"
+                    placeholder="06XXXXXXXX"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-orange-500 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-300">الولاية</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: قسنطينة..."
+                    value={wilaya}
+                    onChange={(e) => setWilaya(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-orange-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-6 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-orange-500/20"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  <span>حفظ التغييرات</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {activeTab === "account" && (
+            <div className="space-y-6">
+              <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">الأمان وحالة الحساب</h2>
+
+              <div className="space-y-1">
+                <span className="text-xs text-slate-400">البريد الإلكتروني الحالي:</span>
+                <p className="text-sm font-semibold text-white bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  {userEmail}
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                <h3 className="text-xs sm:text-sm font-bold text-white">الربط مع Google</h3>
+
+                {isGoogleConnected ? (
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
+                    <CheckCircle2 size={16} />
+                    <span>حسابك مرتبط ومفعل بنجاح بواسطة Google ({userEmail})</span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-400">ربط حسابك بـ Google يتيح لك تسجيل الدخول بنقرة واحدة.</p>
+                    <button
+                      type="button"
+                      onClick={handleGoogleAuth}
+                      className="px-4 py-2.5 rounded-xl bg-white text-slate-900 text-xs sm:text-sm font-bold flex items-center gap-2 transition-all hover:bg-slate-100"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      <span>ربط الحساب بـ Google</span>
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-slate-800">
+                <button
+                  onClick={handleSignOut}
+                  className="px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all"
+                >
+                  <LogOut size={16} />
+                  <span>تسجيل الخروج النهائي</span>
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="text-center py-24 px-4 flex flex-col items-center justify-center my-auto text-slate-500">
-              <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-center justify-center mb-4 text-orange-500/50">
-                <MessageSquare size={32} />
+          )}
+
+          {activeTab === "language" && (
+            <div className="space-y-6">
+              <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">إعدادات اللغة</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLanguage("ar")}
+                  className={`p-4 rounded-xl border text-center ${
+                    language === "ar" ? "bg-orange-500/10 border-orange-500 text-orange-400 font-bold" : "bg-slate-950 border-slate-800 text-slate-300"
+                  }`}
+                >
+                  <p className="text-sm">العربية (Ar)</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLanguage("fr")}
+                  className={`p-4 rounded-xl border text-center ${
+                    language === "fr" ? "bg-orange-500/10 border-orange-500 text-orange-400 font-bold" : "bg-slate-950 border-slate-800 text-slate-300"
+                  }`}
+                >
+                  <p className="text-sm">Français (Fr)</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLanguage("en")}
+                  className={`p-4 rounded-xl border text-center ${
+                    language === "en" ? "bg-orange-500/10 border-orange-500 text-orange-400 font-bold" : "bg-slate-950 border-slate-800 text-slate-300"
+                  }`}
+                >
+                  <p className="text-sm">English (En)</p>
+                </button>
               </div>
-              <p className="text-base font-bold text-slate-300">اختر محادثة لبدء الدردشة</p>
-              <p className="text-xs text-slate-500 mt-1 max-w-xs">
-                انقر على أحد الأشخاص من القائمة الجانبية لعرض الرسائل المتبادلة بينكما.
+            </div>
+          )}
+
+          {activeTab === "about" && (
+            <div className="space-y-6">
+              <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">عن منصة PiecesDZ</h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                PiecesDZ هي منصتك الجزائرية الأولى لقطع غيار السيارات التي تجمع المشتري والمورد مباشرة عبر ولايات الوطن.
               </p>
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs text-slate-400">
+                <div className="flex justify-between">
+                  <span>إصدار التطبيق:</span>
+                  <span className="font-mono text-white">v1.0.0</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
