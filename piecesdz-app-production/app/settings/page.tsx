@@ -13,18 +13,8 @@ import {
   ShieldCheck,
   Info,
   LogOut,
-  ExternalLink,
   Upload,
 } from "lucide-react";
-
-interface ProfileData {
-  id?: string;
-  full_name?: string;
-  avatar_url?: string;
-  phone?: string;
-  wilaya?: string;
-  [key: string]: any;
-}
 
 export default function SettingsPage() {
   const supabase = createClient();
@@ -36,8 +26,11 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<"profile" | "account" | "language" | "about">("profile");
 
+  // الخانات تبدأ فارغة تماماً لضمان عدم إظهار أي بيانات افتراضية لأي مستخدم آخر
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [phone, setPhone] = useState("");
@@ -62,17 +55,22 @@ export default function SettingsPage() {
     setUserId(user.id);
     setUserEmail(user.email || "");
 
+    // التحقق هل الحساب مرتبط أو مسجل بـ Google
+    const provider = user.app_metadata?.provider;
+    const isGoogle = provider === "google" || user.identities?.some((i) => i.provider === "google");
+    setIsGoogleConnected(!!isGoogle);
+
+    // جلب ملف الشخص الحالي حصراً
     const { data: profileData } = await (supabase.from("profiles") as any)
       .select("*")
       .eq("id", user.id)
       .single();
 
     if (profileData) {
-      const data = profileData as ProfileData;
-      setFullName(data.full_name || "");
-      setAvatarUrl(data.avatar_url || "");
-      setPhone(data.phone || "");
-      setWilaya(data.wilaya || "");
+      setFullName(profileData.full_name || "");
+      setAvatarUrl(profileData.avatar_url || "");
+      setPhone(profileData.phone || "");
+      setWilaya(profileData.wilaya || "");
     }
 
     setLoading(false);
@@ -82,7 +80,7 @@ export default function SettingsPage() {
     loadProfile();
   }, [loadProfile]);
 
-  // رفع الصورة الشخصية مباشرة من الهاتف
+  // رفع الصورة الشخصية من الهاتف
   const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
@@ -98,21 +96,19 @@ export default function SettingsPage() {
         .from("avatars")
         .upload(filePath, file, { upsert: true });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       const { data: publicData } = supabase.storage.from("avatars").getPublicUrl(data.path);
       setAvatarUrl(publicData.publicUrl);
-      setMessage({ type: "success", text: "تم رفع الصورة من الهاتف بنجاح! اضغط حفظ التغييرات." });
+      setMessage({ type: "success", text: "تم رفع الصورة من هاتفك بنجاح! لا تنس اضغط حفظ التغييرات." });
     } catch (err) {
-      setMessage({ type: "error", text: "تعذر رفع الصورة. تأكد من إعدادات الحجم والمساحة." });
+      setMessage({ type: "error", text: "حدث خطأ أثناء رفع الصورة." });
     } finally {
       setUploadingAvatar(false);
     }
   };
 
-  // حفظ الملف الشخصي
+  // حفظ بيانات الملف الشخصي
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
@@ -130,7 +126,7 @@ export default function SettingsPage() {
     });
 
     if (error) {
-      setMessage({ type: "error", text: "حدث خطأ أثناء حفظ التغييرات." });
+      setMessage({ type: "error", text: "حدث خطأ أثناء حفظ البيانات." });
     } else {
       setMessage({ type: "success", text: "تم حفظ البيانات بنجاح!" });
     }
@@ -138,6 +134,7 @@ export default function SettingsPage() {
     setSaving(false);
   };
 
+  // ربط أو تسجيل عبر Google
   const handleGoogleAuth = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -147,10 +144,11 @@ export default function SettingsPage() {
     });
 
     if (error) {
-      setMessage({ type: "error", text: "حدث خطأ أثناء الاتصال بحساب قوقل." });
+      setMessage({ type: "error", text: "تعذر الاتصال بخدمة Google." });
     }
   };
 
+  // تسجيل الخروج المباشر
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = "/";
@@ -160,7 +158,7 @@ export default function SettingsPage() {
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
         <Loader2 className="animate-spin text-orange-500" size={32} />
-        <p className="text-sm">جاري تحميل الإعدادات...</p>
+        <p className="text-sm">جاري جلب إعدادات حسابك...</p>
       </div>
     );
   }
@@ -168,7 +166,7 @@ export default function SettingsPage() {
   if (!userId) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-2xl mt-8">
-        <p className="text-base font-medium">الرجاء تسجيل الدخول للوصول إلى الإعدادات.</p>
+        <p className="text-base font-medium">يرجى تسجيل الدخول للوصول إلى الإعدادات.</p>
       </div>
     );
   }
@@ -180,13 +178,12 @@ export default function SettingsPage() {
           <Settings size={24} />
         </div>
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white">إعدادات الحساب والموقع</h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">إدارة الملف الشخصي، الأمان، واللغة</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-white">إعدادات الحساب</h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">تعديل ملفك الشخصي، الأمان والربط مع قوقل</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        {/* الشريط الجانبي */}
         <div className="md:col-span-4 lg:col-span-3 flex flex-col gap-2">
           <button
             onClick={() => setActiveTab("profile")}
@@ -209,7 +206,7 @@ export default function SettingsPage() {
             }`}
           >
             <ShieldCheck size={18} />
-            <span>الأمان وتسجيل قوقل</span>
+            <span>الأمان وحساب Google</span>
           </button>
 
           <button
@@ -233,11 +230,10 @@ export default function SettingsPage() {
             }`}
           >
             <Info size={18} />
-            <span>حول الموقع</span>
+            <span>حول المنصة</span>
           </button>
         </div>
 
-        {/* محتوى الصفحة */}
         <div className="md:col-span-8 lg:col-span-9 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
           {message && (
             <div
@@ -254,11 +250,10 @@ export default function SettingsPage() {
 
           {activeTab === "profile" && (
             <form onSubmit={handleSaveProfile} className="space-y-6">
-              <h2 className="text-base font-bold text-white mb-4 border-b border-slate-800 pb-3">بيانات الملف الشخصي</h2>
+              <h2 className="text-base font-bold text-white mb-4 border-b border-slate-800 pb-3">تعديل ملفك الشخصي</h2>
 
-              {/* رفع الصورة من الهاتف */}
               <div className="flex flex-col sm:flex-row items-center gap-5 pb-4 border-b border-slate-800/80">
-                <div className="w-20 h-20 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                <div className="w-20 h-20 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
                   {avatarUrl ? (
                     <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
@@ -286,7 +281,7 @@ export default function SettingsPage() {
                     ) : (
                       <Upload size={14} className="text-orange-400" />
                     )}
-                    <span>اختر صورة من الهاتف</span>
+                    <span>رفع صورة من هاتفك</span>
                   </button>
                 </div>
               </div>
@@ -295,8 +290,7 @@ export default function SettingsPage() {
                 <label className="block text-xs font-semibold text-slate-300">الاسم الكامل</label>
                 <input
                   type="text"
-                  required
-                  placeholder="أدخل اسمك الكامل"
+                  placeholder="أدخل اسمك الكامل..."
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-orange-500 transition-colors"
@@ -341,39 +335,50 @@ export default function SettingsPage() {
 
           {activeTab === "account" && (
             <div className="space-y-6">
-              <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">الأمان والحساب</h2>
+              <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">الأمان وحالة الحساب</h2>
+
               <div className="space-y-1">
-                <span className="text-xs text-slate-400">البريد الإلكتروني:</span>
+                <span className="text-xs text-slate-400">البريد الإلكتروني الحالي:</span>
                 <p className="text-sm font-semibold text-white bg-slate-950 p-3 rounded-xl border border-slate-800">
                   {userEmail}
                 </p>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <h3 className="text-xs sm:text-sm font-bold text-white">التسجيل والربط عبر Google</h3>
-                <p className="text-xs text-slate-400">سجل الدخول السريع أو اربط حسابك بـ Google بضغطة زر واحدة.</p>
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  className="px-4 py-2.5 rounded-xl bg-white text-slate-900 text-xs sm:text-sm font-bold flex items-center gap-2 transition-all"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                  </svg>
-                  <span>متابعة باستخدام Google</span>
-                </button>
+                <h3 className="text-xs sm:text-sm font-bold text-white">الربط مع Google</h3>
+
+                {isGoogleConnected ? (
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
+                    <CheckCircle2 size={16} />
+                    <span>حسابك مرتبط ومفعل بنجاح بواسطة Google ({userEmail})</span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-400">ربط حسابك بـ Google يتيح لك تسجيل الدخول بنقرة واحدة.</p>
+                    <button
+                      type="button"
+                      onClick={handleGoogleAuth}
+                      className="px-4 py-2.5 rounded-xl bg-white text-slate-900 text-xs sm:text-sm font-bold flex items-center gap-2 transition-all hover:bg-slate-100"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      <span>ربط الحساب بـ Google</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="pt-4 border-t border-slate-800">
                 <button
                   onClick={handleSignOut}
-                  className="px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs sm:text-sm font-semibold flex items-center gap-2"
+                  className="px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all"
                 >
                   <LogOut size={16} />
-                  <span>تسجيل الخروج من الحساب</span>
+                  <span>تسجيل الخروج النهائي</span>
                 </button>
               </div>
             </div>
@@ -418,10 +423,10 @@ export default function SettingsPage() {
             <div className="space-y-6">
               <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">عن منصة PiecesDZ</h2>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                منصة جزايرية متخصصة في ربط أصحاب السيارات بقطع الغيار والموردين مباشرة.
+                PiecesDZ هي منصتك الجزائرية الأولى لقطع غيار السيارات التي تجمع المشتري والمورد مباشرة عبر ولايات الوطن.
               </p>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
-                <div className="flex justify-between text-slate-400">
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs text-slate-400">
+                <div className="flex justify-between">
                   <span>إصدار التطبيق:</span>
                   <span className="font-mono text-white">v1.0.0</span>
                 </div>
