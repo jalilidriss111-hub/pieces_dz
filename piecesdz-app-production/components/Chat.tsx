@@ -8,10 +8,16 @@ import React, {
 } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+const supabase = createClient(
+  supabaseUrl,
+  supabaseKey
+);
 
 interface ChatProps {
   currentUserId: string;
@@ -27,20 +33,28 @@ interface Message {
   created_at: string;
 }
 
-export default function Chat({ currentUserId, receiverId }: ChatProps) {
+export default function Chat({
+  currentUserId,
+  receiverId,
+}: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // معرف المستقبل الحقيقي بعد التحقق
-  const [targetUserId, setTargetUserId] = useState<string | null>(null);
-  const [resolvingId, setResolvingId] = useState<boolean>(true);
+  // ID الحقيقي لصاحب المحل
+  const [targetUserId, setTargetUserId] =
+    useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [resolvingId, setResolvingId] =
+    useState(true);
+
+  const messagesEndRef =
+    useRef<HTMLDivElement>(null);
 
   // =====================================================
-  // RESOLVE SHOP_ID TO USER_ID (حل المشكلة في الخلفية)
+  // تحويل shop.id إلى shops.owner_id
   // =====================================================
+
   useEffect(() => {
     let isMounted = true;
 
@@ -54,25 +68,30 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
       }
 
       setResolvingId(true);
+      setTargetUserId(null);
 
       try {
-        // نتحقق أولاً إن كان receiverId عبارة عن shop_id
-        const { data: shop } = await supabase
+        const {
+          data: shop,
+          error,
+        } = await supabase
           .from('shops')
-          .select('user_id')
+          .select('owner_id')
           .eq('id', receiverId)
           .maybeSingle();
 
-        if (isMounted) {
-          if (shop && shop.user_id) {
-            setTargetUserId(shop.user_id);
-          } else {
-            setTargetUserId(receiverId);
-          }
+        if (!isMounted) return;
+
+        if (error || !shop?.owner_id) {
+          setTargetUserId(null);
+          setResolvingId(false);
+          return;
         }
-      } catch (err) {
+
+        setTargetUserId(shop.owner_id);
+      } catch {
         if (isMounted) {
-          setTargetUserId(receiverId);
+          setTargetUserId(null);
         }
       } finally {
         if (isMounted) {
@@ -91,108 +110,204 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
   // =====================================================
   // CHECK IDS
   // =====================================================
+
   const checkIds = useCallback(() => {
-    if (!currentUserId || !targetUserId || currentUserId === targetUserId) {
+    if (!currentUserId) {
       return false;
     }
+
+    if (!targetUserId) {
+      return false;
+    }
+
+    if (currentUserId === targetUserId) {
+      return false;
+    }
+
     return true;
-  }, [currentUserId, targetUserId]);
+  }, [
+    currentUserId,
+    targetUserId,
+  ]);
 
   // =====================================================
   // FETCH MESSAGES
   // =====================================================
-  const fetchMessages = useCallback(async () => {
-    if (!checkIds() || !targetUserId) return;
 
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .or(
-          `and(sender_id.eq.${currentUserId},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${currentUserId})`
-        )
-        .order('created_at', { ascending: true });
-
-      if (!error && data) {
-        setMessages(data as Message[]);
+  const fetchMessages = useCallback(
+    async () => {
+      if (
+        !checkIds() ||
+        !targetUserId
+      ) {
+        return;
       }
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    }
-  }, [currentUserId, targetUserId, checkIds]);
+
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('messages')
+          .select('*')
+          .or(
+            `and(sender_id.eq.${currentUserId},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${currentUserId})`
+          )
+          .order(
+            'created_at',
+            {
+              ascending: true,
+            }
+          );
+
+        if (error) {
+          return;
+        }
+
+        setMessages(
+          (data || []) as Message[]
+        );
+      } catch {
+        return;
+      }
+    },
+    [
+      currentUserId,
+      targetUserId,
+      checkIds,
+    ]
+  );
 
   // =====================================================
   // INITIAL FETCH + POLLING
   // =====================================================
+
   useEffect(() => {
-    if (resolvingId || !checkIds()) return;
+    if (
+      resolvingId ||
+      !checkIds()
+    ) {
+      return;
+    }
 
     fetchMessages();
 
-    const interval = setInterval(() => {
-      fetchMessages();
-    }, 3000);
+    const interval =
+      setInterval(() => {
+        fetchMessages();
+      }, 3000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [resolvingId, currentUserId, targetUserId, fetchMessages, checkIds]);
+  }, [
+    resolvingId,
+    currentUserId,
+    targetUserId,
+    fetchMessages,
+    checkIds,
+  ]);
 
   // =====================================================
   // SCROLL
   // =====================================================
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'smooth',
+    });
   }, [messages]);
 
   // =====================================================
   // SEND MESSAGE
   // =====================================================
-  const sendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
 
-    const contentToSend = newMessage.trim();
-    if (!contentToSend || !checkIds() || !targetUserId) return;
+  const sendMessage = async (
+    e?: React.FormEvent
+  ) => {
+    if (e) {
+      e.preventDefault();
+    }
+
+    const contentToSend =
+      newMessage.trim();
+
+    if (
+      !contentToSend ||
+      !checkIds() ||
+      !targetUserId
+    ) {
+      return;
+    }
 
     setNewMessage('');
 
     try {
-      const { error: insertError } = await supabase
+      const {
+        error: insertError,
+      } = await supabase
         .from('messages')
         .insert([
           {
-            sender_id: currentUserId,
-            receiver_id: targetUserId,
-            content: contentToSend,
-            media_type: 'text',
+            sender_id:
+              currentUserId,
+
+            receiver_id:
+              targetUserId,
+
+            content:
+              contentToSend,
+
+            media_type:
+              'text',
           },
         ]);
 
       if (insertError) {
-        setNewMessage(contentToSend);
-        alert('فشل إرسال الرسالة: ' + insertError.message);
+        setNewMessage(
+          contentToSend
+        );
+
+        alert(
+          'فشل إرسال الرسالة: ' +
+            insertError.message
+        );
+
         return;
       }
 
-      fetchMessages();
-    } catch (error: any) {
-      console.error('Error sending message:', error);
-      setNewMessage(contentToSend);
+      await fetchMessages();
+    } catch {
+      setNewMessage(
+        contentToSend
+      );
     }
   };
 
   // =====================================================
   // FILE UPLOAD
   // =====================================================
+
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'image' | 'audio'
   ) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const files =
+      e.target.files;
+
+    if (
+      !files ||
+      files.length === 0
+    ) {
+      return;
+    }
 
     const file = files[0];
-    if (!checkIds() || !targetUserId) {
+
+    if (
+      !checkIds() ||
+      !targetUserId
+    ) {
       e.target.value = '';
       return;
     }
@@ -200,45 +315,102 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     setUploading(true);
 
     try {
-      const fileExt = file.name.split('.').pop() || 'bin';
-      const randomString = Math.random().toString(36).substring(2);
-      const fileName = `${Date.now()}_${randomString}.${fileExt}`;
-      const filePath = `${currentUserId}/${fileName}`;
+      const fileExt =
+        file.name
+          .split('.')
+          .pop() || 'bin';
 
-      const { error: uploadError } = await supabase.storage
+      const randomString =
+        Math.random()
+          .toString(36)
+          .substring(2);
+
+      const fileName =
+        `${Date.now()}_${randomString}.${fileExt}`;
+
+      const filePath =
+        `${currentUserId}/${fileName}`;
+
+      const {
+        error: uploadError,
+      } = await supabase.storage
         .from('chat_media')
-        .upload(filePath, file, { upsert: true });
+        .upload(
+          filePath,
+          file,
+          {
+            upsert: true,
+          }
+        );
 
       if (uploadError) {
-        alert('فشل رفع الملف: ' + uploadError.message);
+        alert(
+          'فشل رفع الملف: ' +
+            uploadError.message
+        );
+
         setUploading(false);
         return;
       }
 
-      const { data: publicUrlData } = supabase.storage
+      const {
+        data: publicUrlData,
+      } = supabase.storage
         .from('chat_media')
-        .getPublicUrl(filePath);
+        .getPublicUrl(
+          filePath
+        );
 
-      const publicUrl = publicUrlData?.publicUrl;
+      const publicUrl =
+        publicUrlData?.publicUrl;
 
-      if (publicUrl) {
-        await supabase.from('messages').insert([
+      if (!publicUrl) {
+        setUploading(false);
+        return;
+      }
+
+      const {
+        error: insertError,
+      } = await supabase
+        .from('messages')
+        .insert([
           {
-            sender_id: currentUserId,
-            receiver_id: targetUserId,
-            content: publicUrl,
-            media_type: type,
+            sender_id:
+              currentUserId,
+
+            receiver_id:
+              targetUserId,
+
+            content:
+              publicUrl,
+
+            media_type:
+              type,
           },
         ]);
-        fetchMessages();
+
+      if (insertError) {
+        alert(
+          'فشل حفظ رسالة الملف: ' +
+            insertError.message
+        );
+
+        setUploading(false);
+        return;
       }
-    } catch (error: any) {
-      console.error('Error uploading file:', error);
+
+      await fetchMessages();
+    } catch {
+      // تجاهل الخطأ
     }
 
     setUploading(false);
     e.target.value = '';
   };
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <div
@@ -249,14 +421,14 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         maxWidth: '600px',
         margin: 'auto',
         backgroundColor: '#0f172a',
-        border: '1px solid #334155',
+        border:
+          '1px solid #334155',
         borderRadius: '12px',
         padding: '12px',
       }}
     >
-      {/* =========================================
-          MESSAGES AREA
-      ========================================== */}
+      {/* MESSAGES */}
+
       <div
         style={{
           flex: 1,
@@ -268,173 +440,373 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         }}
       >
         {resolvingId ? (
-          <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>
+          <div
+            style={{
+              textAlign: 'center',
+              color: '#64748b',
+              padding: '20px',
+            }}
+          >
             جاري تحضير المحادثة...
           </div>
+        ) : !targetUserId ? (
+          <div
+            style={{
+              textAlign: 'center',
+              color: '#ef4444',
+              padding: '20px',
+            }}
+          >
+            تعذر تحديد صاحب المحل.
+          </div>
         ) : messages.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>
+          <div
+            style={{
+              textAlign: 'center',
+              color: '#64748b',
+              padding: '20px',
+            }}
+          >
             لا توجد رسائل بعد. اكتب رسالتك وابدأ المحادثة!
           </div>
         ) : (
-          messages.map((msg) => {
-            const isMe = msg.sender_id === currentUserId;
+          messages.map(
+            (msg) => {
+              const isMe =
+                msg.sender_id ===
+                currentUserId;
 
-            return (
-              <div
-                key={msg.id}
-                style={{
-                  alignSelf: isMe ? 'flex-end' : 'flex-start',
-                  background: isMe ? '#f97316' : '#1e293b',
-                  color: isMe ? '#0f172a' : '#f8fafc',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  maxWidth: '75%',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                }}
-              >
-                {msg.media_type === 'text' && (
-                  <p style={{ margin: 0, wordBreak: 'break-word' }}>
-                    {msg.content}
-                  </p>
-                )}
-
-                {msg.media_type === 'image' && (
-                  <img
-                    src={msg.content}
-                    alt="media"
-                    style={{
-                      maxWidth: '200px',
-                      borderRadius: '6px',
-                      display: 'block',
-                    }}
-                  />
-                )}
-
-                {msg.media_type === 'audio' && (
-                  <audio controls src={msg.content} style={{ width: '200px' }} />
-                )}
-
-                <span
+              return (
+                <div
+                  key={msg.id}
                   style={{
-                    fontSize: '10px',
-                    opacity: 0.7,
-                    display: 'block',
-                    textAlign: 'right',
-                    marginTop: '4px',
+                    alignSelf:
+                      isMe
+                        ? 'flex-end'
+                        : 'flex-start',
+
+                    background:
+                      isMe
+                        ? '#f97316'
+                        : '#1e293b',
+
+                    color:
+                      isMe
+                        ? '#0f172a'
+                        : '#f8fafc',
+
+                    padding:
+                      '8px 12px',
+
+                    borderRadius:
+                      '8px',
+
+                    maxWidth:
+                      '75%',
+
+                    boxShadow:
+                      '0 1px 2px rgba(0,0,0,0.1)',
                   }}
                 >
-                  {new Date(msg.created_at).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-              </div>
-            );
-          })
+                  {msg.media_type ===
+                    'text' && (
+                    <p
+                      style={{
+                        margin: 0,
+                        wordBreak:
+                          'break-word',
+                      }}
+                    >
+                      {msg.content}
+                    </p>
+                  )}
+
+                  {msg.media_type ===
+                    'image' && (
+                    <img
+                      src={
+                        msg.content
+                      }
+                      alt="media"
+                      style={{
+                        maxWidth:
+                          '200px',
+                        borderRadius:
+                          '6px',
+                        display:
+                          'block',
+                      }}
+                    />
+                  )}
+
+                  {msg.media_type ===
+                    'audio' && (
+                    <audio
+                      controls
+                      src={
+                        msg.content
+                      }
+                      style={{
+                        width:
+                          '200px',
+                      }}
+                    />
+                  )}
+
+                  <span
+                    style={{
+                      fontSize:
+                        '10px',
+                      opacity:
+                        0.7,
+                      display:
+                        'block',
+                      textAlign:
+                        'right',
+                      marginTop:
+                        '4px',
+                    }}
+                  >
+                    {new Date(
+                      msg.created_at
+                    ).toLocaleTimeString(
+                      [],
+                      {
+                        hour:
+                          '2-digit',
+                        minute:
+                          '2-digit',
+                      }
+                    )}
+                  </span>
+                </div>
+              );
+            }
+          )
         )}
 
-        <div ref={messagesEndRef} />
+        <div
+          ref={
+            messagesEndRef
+          }
+        />
       </div>
 
-      {/* UPLOADING STATE */}
+      {/* UPLOADING */}
+
       {uploading && (
         <p
           style={{
-            textAlign: 'center',
-            color: '#f97316',
-            fontSize: '12px',
-            margin: '4px 0',
+            textAlign:
+              'center',
+            color:
+              '#f97316',
+            fontSize:
+              '12px',
+            margin:
+              '4px 0',
           }}
         >
           جاري رفع الملف...
         </p>
       )}
 
-      {/* =========================================
-          INPUT AREA
-      ========================================== */}
+      {/* INPUT */}
+
       <form
-        onSubmit={sendMessage}
+        onSubmit={
+          sendMessage
+        }
         style={{
-          display: 'flex',
-          gap: '8px',
-          marginTop: '10px',
-          alignItems: 'center',
+          display:
+            'flex',
+          gap:
+            '8px',
+          marginTop:
+            '10px',
+          alignItems:
+            'center',
         }}
       >
         <input
           type="text"
-          value={newMessage}
-          disabled={resolvingId}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder={resolvingId ? 'جاري الاتصال...' : 'اكتب رسالتك...'}
+          value={
+            newMessage
+          }
+          disabled={
+            resolvingId ||
+            !targetUserId
+          }
+          onChange={(e) =>
+            setNewMessage(
+              e.target.value
+            )
+          }
+          placeholder={
+            resolvingId
+              ? 'جاري الاتصال...'
+              : !targetUserId
+              ? 'تعذر تحديد صاحب المحل'
+              : 'اكتب رسالتك...'
+          }
           style={{
             flex: 1,
-            padding: '10px',
-            borderRadius: '8px',
-            border: '1px solid #334155',
-            background: '#1e293b',
-            color: '#fff',
-            outline: 'none',
+            padding:
+              '10px',
+            borderRadius:
+              '8px',
+            border:
+              '1px solid #334155',
+            background:
+              '#1e293b',
+            color:
+              '#fff',
+            outline:
+              'none',
           }}
         />
 
         <label
           style={{
-            cursor: resolvingId ? 'not-allowed' : 'pointer',
-            background: '#1e293b',
-            border: '1px solid #334155',
-            padding: '8px 10px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
+            cursor:
+              resolvingId ||
+              !targetUserId
+                ? 'not-allowed'
+                : 'pointer',
+
+            background:
+              '#1e293b',
+
+            border:
+              '1px solid #334155',
+
+            padding:
+              '8px 10px',
+
+            borderRadius:
+              '8px',
+
+            display:
+              'flex',
+
+            alignItems:
+              'center',
+
+            opacity:
+              resolvingId ||
+              !targetUserId
+                ? 0.5
+                : 1,
           }}
           title="إرسال صورة"
         >
           📷
+
           <input
             type="file"
             accept="image/*"
-            disabled={resolvingId}
-            onChange={(e) => handleFileUpload(e, 'image')}
-            style={{ display: 'none' }}
+            disabled={
+              resolvingId ||
+              !targetUserId
+            }
+            onChange={(e) =>
+              handleFileUpload(
+                e,
+                'image'
+              )
+            }
+            style={{
+              display:
+                'none',
+            }}
           />
         </label>
 
         <label
           style={{
-            cursor: resolvingId ? 'not-allowed' : 'pointer',
-            background: '#1e293b',
-            border: '1px solid #334155',
-            padding: '8px 10px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
+            cursor:
+              resolvingId ||
+              !targetUserId
+                ? 'not-allowed'
+                : 'pointer',
+
+            background:
+              '#1e293b',
+
+            border:
+              '1px solid #334155',
+
+            padding:
+              '8px 10px',
+
+            borderRadius:
+              '8px',
+
+            display:
+              'flex',
+
+            alignItems:
+              'center',
+
+            opacity:
+              resolvingId ||
+              !targetUserId
+                ? 0.5
+                : 1,
           }}
           title="إرسال صوت"
         >
           🎤
+
           <input
             type="file"
             accept="audio/*"
-            disabled={resolvingId}
-            onChange={(e) => handleFileUpload(e, 'audio')}
-            style={{ display: 'none' }}
+            disabled={
+              resolvingId ||
+              !targetUserId
+            }
+            onChange={(e) =>
+              handleFileUpload(
+                e,
+                'audio'
+              )
+            }
+            style={{
+              display:
+                'none',
+            }}
           />
         </label>
 
         <button
           type="submit"
-          disabled={resolvingId}
+          disabled={
+            resolvingId ||
+            !targetUserId
+          }
           style={{
-            padding: '10px 16px',
-            background: '#f97316',
-            color: '#0f172a',
-            fontWeight: 'bold',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: resolvingId ? 'not-allowed' : 'pointer',
-            opacity: resolvingId ? 0.6 : 1,
+            padding:
+              '10px 16px',
+            background:
+              '#f97316',
+            color:
+              '#0f172a',
+            fontWeight:
+              'bold',
+            border:
+              'none',
+            borderRadius:
+              '8px',
+            cursor:
+              resolvingId ||
+              !targetUserId
+                ? 'not-allowed'
+                : 'pointer',
+            opacity:
+              resolvingId ||
+              !targetUserId
+                ? 0.6
+                : 1,
           }}
         >
           إرسال
