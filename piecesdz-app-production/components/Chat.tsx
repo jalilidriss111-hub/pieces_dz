@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-// اضبط مسار استيراد عميل Supabase حسب مشروعك (مثلاً: @/lib/supabase)
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@/lib/supabase/client";
 
 export interface Message {
   id: string;
@@ -19,6 +18,8 @@ interface ChatProps {
 }
 
 export default function Chat({ currentUserId = "user_1", chatRoomId = "default_room" }: ChatProps) {
+  const supabase = createClient();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -37,7 +38,7 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     scrollToBottom();
   }, [messages]);
 
-  // جلب الرسائل الأولية والاستماع للرسائل الجديدة (Realtime)
+  // جلب الرسائل الأولية والاستماع المباشر (Realtime)
   useEffect(() => {
     const fetchMessages = async () => {
       const { data, error } = await supabase
@@ -71,7 +72,7 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     };
   }, [chatRoomId]);
 
-  // دالة رفع الملفات إلى الباكت chat_media
+  // دالة رفع الملفات لـ Supabase Storage بباكت chat_media
   const uploadFile = async (file: Blob | File, folder: string): Promise<string | null> => {
     try {
       setIsUploading(true);
@@ -107,7 +108,7 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     }
   };
 
-  // إرسال الرسالة لقاعدة البيانات
+  // إرسال الرسالة إلى جدول messages
   const sendMessage = async (content?: string, mediaUrl?: string, mediaType?: string) => {
     if (!content?.trim() && !mediaUrl) return;
 
@@ -175,7 +176,7 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     }
   };
 
-  // إيقاف التسجيل وإرسال الملاحظة الصوتية
+  // إيقاف التسجيل وإرسال الصوت
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -220,7 +221,7 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
                   <audio controls src={msg.media_url} className="mt-2 w-full max-w-[240px]" />
                 )}
 
-                {/* عرض الملفات العامة */}
+                {/* عرض الملفات */}
                 {msg.media_type === "file" && msg.media_url && (
                   <a
                     href={msg.media_url}
