@@ -26,7 +26,7 @@ export default function PricingPage() {
           </div>
           <h2 className="text-xl font-bold text-white mb-2">المنصة مجانية بالكامل حالياً!</h2>
           <p className="text-slate-300 text-sm leading-relaxed mb-6">
-            بمناسبة إطلاق منصة <strong>PiecesDZ</strong>، جميع الميزات والخدمات متاحة مجاناً لكل التجار والمحلات والورشات لمدة شهرين. استغل الفرصة وأنشئ حسابك الآن!
+            بمناسبة إطلاق منصة <strong>PiecesDZ</strong>، جميع الميزات والخدمات متاحة مجاناً لكل التجار والمحلات والورشات لمدة ثلاث اشهر. استغل الفرصة وأنشئ حسابك الآن!
           </p>
           <Link href="/shop/onboarding">
             <PrimaryButton className="w-full">إنشاء حساب تجاري مجاناً</PrimaryButton>
