@@ -27,7 +27,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
   const supabase = createClient();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [receiverProfile, setReceiverProfile] = useState<Profile null |>(null);
+  const [receiverProfile, setReceiverProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -171,7 +171,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <User className="text-orange-400" size="{20}"/>
+              <User className="text-orange-400" size={20} />
             )}
           </div>
           <div>
@@ -186,7 +186,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
       <div className="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2">
-            <Loader2 className="animate-spin text-orange-500" size="{24}"/>
+            <Loader2 className="animate-spin text-orange-500" size={24} />
             <span className="text-xs">جاري تحميل الرسائل...</span>
           </div>
         ) : messages.length === 0 ? (
@@ -247,7 +247,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
           className="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-orange-400 hover:bg-slate-700 transition-colors disabled:opacity-50 shrink-0"
           title="إرسال صورة"
         >
-          {uploadingImage ? <Loader2 className="animate-spin" size="{20}"/> : <ImageIcon size="{20}"/>}
+          {uploadingImage ? <Loader2 className="animate-spin" size={20} /> : <ImageIcon size={20} />}
         </button>
 
         <input
@@ -263,7 +263,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
           disabled={!newMessage.trim() || sending}
           className="p-2.5 rounded-xl bg-orange-500 text-slate-950 hover:bg-orange-400 transition-colors disabled:opacity-50 font-bold shrink-0"
         >
-          {sending ? <Loader2 className="animate-spin" size="{20}"/> : <Send className="rotate-180" size="{20}"/>}
+          {sending ? <Loader2 className="animate-spin" size={20} /> : <Send className="rotate-180" size={20} />}
         </button>
       </form>
     </div>
