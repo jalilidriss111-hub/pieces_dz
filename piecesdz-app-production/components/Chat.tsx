@@ -26,13 +26,14 @@ interface ShopRecord {
 }
 
 export default function Chat({
-  currentUserId = "user_1",
+  currentUserId,
   receiverId,
   shopId,
   chatRoomId = "default_room",
 }: ChatProps) {
   const supabase = createClient();
 
+  const [activeUserId, setActiveUserId] = useState<string | null>(currentUserId || null);
   const [resolvedReceiverId, setResolvedReceiverId] = useState<string | null>(receiverId || null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
@@ -51,7 +52,22 @@ export default function Chat({
     scrollToBottom();
   }, [messages]);
 
-  // 1. جلب ID صاحب المحل (Owner ID) عند تمرير shopId
+  // 1. جلب ID المستخدم الحالي من Supabase Auth إذا لم يُمرّر
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      if (currentUserId) {
+        setActiveUserId(currentUserId);
+        return;
+      }
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.id) {
+        setActiveUserId(data.user.id);
+      }
+    };
+    fetchCurrentUser();
+  }, [currentUserId]);
+
+  // 2. جلب ID صاحب المحل (Owner ID) عند تمرير shopId
   useEffect(() => {
     if (receiverId) {
       setResolvedReceiverId(receiverId);
@@ -80,18 +96,18 @@ export default function Chat({
     }
   }, [shopId, receiverId]);
 
-  // 2. جلب الرسائل والتحديث الفوري
+  // 3. جلب الرسائل والتحديث الفوري
   useEffect(() => {
-    if (!resolvedReceiverId && (shopId || receiverId)) return;
+    if (!activeUserId) return;
 
     const fetchMessages = async () => {
       let query = (supabase.from("messages") as any)
         .select("*")
         .order("created_at", { ascending: true });
 
-      if (resolvedReceiverId && currentUserId) {
+      if (resolvedReceiverId && activeUserId) {
         query = query.or(
-          `and(sender_id.eq.${currentUserId},receiver_id.eq.${resolvedReceiverId}),and(sender_id.eq.${resolvedReceiverId},receiver_id.eq.${currentUserId})`
+          `and(sender_id.eq.${activeUserId},receiver_id.eq.${resolvedReceiverId}),and(sender_id.eq.${resolvedReceiverId},receiver_id.eq.${activeUserId})`
         );
       }
 
@@ -116,7 +132,7 @@ export default function Chat({
           if (
             !resolvedReceiverId ||
             newMessage.sender_id === resolvedReceiverId ||
-            newMessage.sender_id === currentUserId
+            newMessage.sender_id === activeUserId
           ) {
             setMessages((prev) => [...prev, newMessage]);
           }
@@ -127,9 +143,9 @@ export default function Chat({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chatRoomId, resolvedReceiverId, currentUserId]);
+  }, [chatRoomId, resolvedReceiverId, activeUserId]);
 
-  // 3. رفع الملفات لباكت chat_media
+  // 4. رفع الملفات لباكت chat_media
   const uploadFile = async (file: Blob | File, folder: string): Promise<string | null> => {
     try {
       setIsUploading(true);
@@ -147,7 +163,7 @@ export default function Chat({
 
       if (error) {
         console.error("خطأ Supabase Storage:", error);
-        alert(`خطأ في الرفع: ${error.message}`);
+        alert(`خطأ في رفع الملف: ${error.message}`);
         return null;
       }
 
@@ -165,23 +181,31 @@ export default function Chat({
     }
   };
 
-  // 4. إرسال الرسائل
+  // 5. إرسال الرسائل مع طباعة الخطأ الصريح
   const sendMessage = async (content?: string, mediaUrl?: string, mediaType?: string) => {
     if (!content?.trim() && !mediaUrl) return;
 
-    const { error } = await (supabase.from("messages") as any).insert([
-      {
-        sender_id: currentUserId,
-        receiver_id: resolvedReceiverId || null,
-        content: content || null,
-        media_url: mediaUrl || null,
-        media_type: mediaType || null,
-      },
-    ]);
+    if (!activeUserId) {
+      alert("تعذر تحديد هوية المستخدم الحالي، يرجى تسجيل الدخول.");
+      return;
+    }
+
+    const payload: any = {
+      sender_id: activeUserId,
+      content: content || null,
+      media_url: mediaUrl || null,
+      media_type: mediaType || null,
+    };
+
+    if (resolvedReceiverId) {
+      payload.receiver_id = resolvedReceiverId;
+    }
+
+    const { error } = await (supabase.from("messages") as any).insert([payload]);
 
     if (error) {
       console.error("خطأ أثناء إرسال الرسالة:", error);
-      alert("تعذر إرسال الرسالة، تأكد من إعدادات الجدول.");
+      alert(`خطأ Supabase عند الإرسال: ${error.message || error.details || "تأكد من إعدادات RLS بجدول الرسائل"}`);
     } else {
       setText("");
     }
@@ -240,63 +264,78 @@ export default function Chat({
   };
 
   return (
-    <div className="flex flex-col h-[600px] max-w-2xl mx-auto border rounded-2xl bg-slate-900 text-white shadow-xl overflow-hidden" dir="rtl">
-      {/* شريط العنوان */}
-      <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-        <h2 className="text-lg font-bold">المحادثة</h2>
-        {isUploading && <span className="text-xs text-amber-400 animate-pulse">جاري الرفع إلى chat_media...</span>}
+    <div className="flex flex-col h-[650px] max-w-2xl mx-auto border border-slate-800 rounded-3xl bg-slate-950 text-slate-100 shadow-2xl overflow-hidden font-sans" dir="rtl">
+      {/* Header */}
+      <div className="p-4 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
+          <h2 className="text-base font-semibold text-slate-200">المحادثة المباشرة</h2>
+        </div>
+        {isUploading && (
+          <span className="text-xs font-medium text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 animate-pulse">
+            جاري الرفع...
+          </span>
+        )}
       </div>
 
-      {/* منطقة الرسائل */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => {
-          const isMe = msg.sender_id === currentUserId;
-          return (
-            <div key={msg.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-              <div
-                className={`max-w-[80%] p-3 rounded-2xl text-sm ${
-                  isMe
-                    ? "bg-blue-600 text-white rounded-br-none"
-                    : "bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700"
-                }`}
-              >
-                {msg.content && <p className="leading-relaxed">{msg.content}</p>}
+      {/* Messages List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/50">
+        {messages.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+            لا توجد رسائل بعد، ابدأ المحادثة الآن...
+          </div>
+        ) : (
+          messages.map((msg) => {
+            const isMe = msg.sender_id === activeUserId;
+            return (
+              <div key={msg.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                <div
+                  className={`max-w-[82%] p-3.5 rounded-2xl text-sm shadow-sm transition-all ${
+                    isMe
+                      ? "bg-blue-600 text-white rounded-br-xs"
+                      : "bg-slate-800/90 text-slate-100 rounded-bl-xs border border-slate-700/60"
+                  }`}
+                >
+                  {msg.content && <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>}
 
-                {msg.media_type === "image" && msg.media_url && (
-                  <img
-                    src={msg.media_url}
-                    alt="مرفق"
-                    className="mt-2 max-w-full rounded-xl max-h-60 object-cover"
-                  />
-                )}
+                  {msg.media_type === "image" && msg.media_url && (
+                    <img
+                      src={msg.media_url}
+                      alt="مرفق"
+                      className="mt-2 rounded-xl border border-white/10 max-h-64 w-full object-cover"
+                    />
+                  )}
 
-                {msg.media_type === "voice" && msg.media_url && (
-                  <audio controls src={msg.media_url} className="mt-2 w-full max-w-[240px]" />
-                )}
+                  {msg.media_type === "voice" && msg.media_url && (
+                    <div className="mt-2 min-w-[220px]">
+                      <audio controls src={msg.media_url} className="w-full h-10 accent-blue-500 rounded-lg" />
+                    </div>
+                  )}
 
-                {msg.media_type === "file" && msg.media_url && (
-                  <a
-                    href={msg.media_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-block text-blue-300 underline text-xs"
-                  >
-                    تحميل الملف
-                  </a>
-                )}
+                  {msg.media_type === "file" && msg.media_url && (
+                    <a
+                      href={msg.media_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 flex items-center gap-2 text-xs text-blue-300 hover:text-blue-200 underline bg-blue-950/40 p-2 rounded-lg border border-blue-800/40"
+                    >
+                      📎 تحميل المرفق
+                    </a>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1 px-1">
+                  {new Date(msg.created_at).toLocaleTimeString("ar-DZ", { hour: "2-digit", minute: "2-digit" })}
+                </span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1 px-1">
-                {new Date(msg.created_at).toLocaleTimeString("ar-DZ", { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* منطقة الإدخال */}
-      <div className="p-3 bg-slate-800 border-t border-slate-700 flex items-center gap-2">
-        <label className="p-2 cursor-pointer hover:bg-slate-700 rounded-full text-slate-300 transition" title="إرفاق صورة أو ملف">
+      {/* Input Control Bar */}
+      <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
+        <label className="p-2.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition cursor-pointer" title="إرفاق ملف أو صورة">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
           </svg>
@@ -307,10 +346,12 @@ export default function Chat({
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
           disabled={isUploading}
-          className={`p-2 rounded-full transition ${
-            isRecording ? "bg-red-600 text-white animate-pulse" : "hover:bg-slate-700 text-slate-300"
+          className={`p-2.5 rounded-xl transition ${
+            isRecording
+              ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
+              : "hover:bg-slate-800 text-slate-400 hover:text-slate-200"
           }`}
-          title={isRecording ? "إيقاف التسجيل والإرسال" : "تسجيل صوتي"}
+          title={isRecording ? "إيقاف الإرسال" : "تسجيل صوتي"}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -322,14 +363,14 @@ export default function Chat({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage(text)}
-          placeholder="اكتب رسالتك..."
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 text-white"
+          placeholder="اكتب رسالتك هنا..."
+          className="flex-1 bg-slate-950 border border-slate-800 focus:border-blue-500/80 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition"
         />
 
         <button
           onClick={() => sendMessage(text)}
           disabled={!text.trim() || isUploading}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition"
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-blue-600/20"
         >
           إرسال
         </button>
