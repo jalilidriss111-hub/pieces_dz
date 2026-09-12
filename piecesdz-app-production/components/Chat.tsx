@@ -82,16 +82,14 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
     if (!activeUserId || !resolvedReceiverId) return;
 
     const checkBlockStatus = async () => {
-      const { data: blockOut } = await supabase
-        .from("user_blocks")
+      const { data: blockOut } = await (supabase.from("user_blocks") as any)
         .select("*")
         .eq("blocker_id", activeUserId)
         .eq("blocked_id", resolvedReceiverId)
         .maybeSingle();
       setIsBlocked(!!blockOut);
 
-      const { data: blockIn } = await supabase
-        .from("user_blocks")
+      const { data: blockIn } = await (supabase.from("user_blocks") as any)
         .select("*")
         .eq("blocker_id", resolvedReceiverId)
         .eq("blocked_id", activeUserId)
@@ -107,15 +105,14 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
     if (!activeUserId || !resolvedReceiverId) return;
 
     if (isBlocked) {
-      await supabase
-        .from("user_blocks")
+      await (supabase.from("user_blocks") as any)
         .delete()
         .eq("blocker_id", activeUserId)
         .eq("blocked_id", resolvedReceiverId);
       setIsBlocked(false);
       alert("تم فك الحظر بنجاح.");
     } else {
-      await supabase.from("user_blocks").insert([
+      await (supabase.from("user_blocks") as any).insert([
         { blocker_id: activeUserId, blocked_id: resolvedReceiverId }
       ]);
       setIsBlocked(true);
@@ -129,11 +126,9 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
     if (!confirm("هل أنت متأكد من حذف هذه المحادثة من عندك؟")) return;
 
     const now = new Date().toISOString();
-    // نحدد ما إذا كان المستخدم الحالي هو user_1 أو user_2 بناءً على مقارنة الـ IDs
     const isUser1 = activeUserId < resolvedReceiverId;
     const columnToUpdate = isUser1 ? "deleted_for_user_1" : "deleted_for_user_2";
 
-    // تحديث كل الرسائل الس بيننا لتسجيل وقت الحذف
     const { error } = await (supabase.from("messages") as any)
       .update({ [columnToUpdate]: now })
       .or(
@@ -148,7 +143,7 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
     }
   };
 
-  // جلب الرسائل مع مراعاة وقت الحذف (إذا قام بحذف المحادثة لا تظهر الرسائل القديمة التي قبل وقت الحذف)
+  // جلب الرسائل مع مراعاة وقت الحذف
   useEffect(() => {
     if (!activeUserId || !resolvedReceiverId) return;
 
@@ -164,7 +159,6 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
         .order("created_at", { ascending: true });
 
       if (data) {
-        // فلترة الرسائل التي تم حذفها من طرف المستخدم الحالي
         const filtered = data.filter((msg: Message) => {
           const deleteTime = msg[columnToCheck as keyof Message];
           if (!deleteTime) return true;
