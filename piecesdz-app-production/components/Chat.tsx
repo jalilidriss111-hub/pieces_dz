@@ -20,6 +20,11 @@ interface ChatProps {
   chatRoomId?: string;
 }
 
+interface ShopRecord {
+  owner_id?: string;
+  user_id?: string;
+}
+
 export default function Chat({
   currentUserId = "user_1",
   receiverId,
@@ -28,7 +33,6 @@ export default function Chat({
 }: ChatProps) {
   const supabase = createClient();
 
-  // ID المستلم الحقيقي (ID المستخدم صاحب المحل وليس ID المحل نفسه)
   const [resolvedReceiverId, setResolvedReceiverId] = useState<string | null>(receiverId || null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
@@ -47,7 +51,7 @@ export default function Chat({
     scrollToBottom();
   }, [messages]);
 
-  // 1. جلب ID صاحب المحل (Owner ID) إذا تم تمرير shopId
+  // 1. جلب ID صاحب المحل (Owner ID) عند تمرير shopId
   useEffect(() => {
     if (receiverId) {
       setResolvedReceiverId(receiverId);
@@ -60,10 +64,11 @@ export default function Chat({
           .from("shops")
           .select("owner_id, user_id")
           .eq("id", shopId)
-          .single();
+          .maybeSingle();
 
         if (data) {
-          const ownerId = data.owner_id || data.user_id;
+          const shopData = data as ShopRecord;
+          const ownerId = shopData.owner_id || shopData.user_id;
           if (ownerId) {
             setResolvedReceiverId(ownerId);
           }
@@ -76,7 +81,7 @@ export default function Chat({
     }
   }, [shopId, receiverId]);
 
-  // 2. جلب الرسائل والتحديث الفوري بناءً على resolvedReceiverId
+  // 2. جلب الرسائل والتحديث الفوري
   useEffect(() => {
     if (!resolvedReceiverId && (shopId || receiverId)) return;
 
@@ -126,7 +131,7 @@ export default function Chat({
     };
   }, [chatRoomId, resolvedReceiverId, currentUserId]);
 
-  // 3. رفع الملفات إلى Supabase Storage (chat_media)
+  // 3. رفع الملفات لباكت chat_media
   const uploadFile = async (file: Blob | File, folder: string): Promise<string | null> => {
     try {
       setIsUploading(true);
@@ -162,7 +167,7 @@ export default function Chat({
     }
   };
 
-  // 4. إرسال الرسالة إلى الشخص المستهدف (resolvedReceiverId)
+  // 4. إرسال الرسائل
   const sendMessage = async (content?: string, mediaUrl?: string, mediaType?: string) => {
     if (!content?.trim() && !mediaUrl) return;
 
