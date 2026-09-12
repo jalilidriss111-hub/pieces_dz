@@ -10,7 +10,7 @@ interface PricingModalProps {
   onClose?: () => void;
 }
 
-export default function PricingModal({ isOpen = true, onClose }: PricingModalProps) {
+export default function PricingModal({ isOpen = false, onClose }: PricingModalProps) {
   const [visible, setVisible] = useState(isOpen);
 
   if (!visible) return null;
