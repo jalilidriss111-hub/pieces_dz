@@ -17,8 +17,8 @@ export const metadata: Metadata = {
     "طلب قطع غيار",
     "كاس السيارات الجزائر",
     "ateliers auto algerie",
-    "pieces de rechange dz"
-    "بياس السيارات الجزائر"
+    "pieces de rechange dz",
+    "بياس السيارات الجزائر",
     "شراء بياس السيارات  بيع بياس السيارات"
   ],
   authors: [{ name: "PiecesDZ" }],
