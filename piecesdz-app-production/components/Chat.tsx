@@ -35,6 +35,7 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -221,6 +222,15 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
     if (!error) setText("");
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = await uploadFile(file, "images");
+    if (url) {
+      await sendMessage("", url, "image");
+    }
+  };
+
   const startRecording = async () => {
     if (isBlocked || isBlockedByThem) return;
     try {
@@ -317,9 +327,30 @@ export default function Chat({ currentUserId, receiverId, shopId }: ChatProps) {
         </div>
       ) : (
         <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
-          <button onClick={isRecording ? stopRecording : startRecording} className="p-2 text-slate-400 hover:text-white">
-            🎙️
+          {/* مخفي لاختيار الصور القديم */}
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleImageUpload} 
+            accept="image/*" 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()} 
+            className="p-2 text-slate-400 hover:text-white"
+            title="إرسال صورة"
+          >
+            📷
           </button>
+
+          <button 
+            onClick={isRecording ? stopRecording : startRecording} 
+            className={`p-2 rounded-full transition ${isRecording ? "text-red-500 animate-bounce" : "text-slate-400 hover:text-white"}`}
+            title="إرسال تسجيل صوتي"
+          >
+            {isRecording ? "⏹️" : "🎙️"}
+          </button>
+
           <input
             type="text"
             value={text}
