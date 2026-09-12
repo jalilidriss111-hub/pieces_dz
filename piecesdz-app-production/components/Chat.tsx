@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 export interface Message {
   id: string;
   sender_id?: string;
+  receiver_id?: string;
   content?: string;
   media_url?: string;
   media_type?: "image" | "voice" | "file" | string;
@@ -14,12 +15,21 @@ export interface Message {
 
 interface ChatProps {
   currentUserId?: string;
+  receiverId?: string;
+  shopId?: string;
   chatRoomId?: string;
 }
 
-export default function Chat({ currentUserId = "user_1", chatRoomId = "default_room" }: ChatProps) {
+export default function Chat({
+  currentUserId = "user_1",
+  receiverId,
+  shopId,
+  chatRoomId = "default_room",
+}: ChatProps) {
   const supabase = createClient();
 
+  // ID المستلم الحقيقي (ID المستخدم صاحب المحل وليس ID المحل نفسه)
+  const [resolvedReceiverId, setResolvedReceiverId] = useState<string | null>(receiverId || null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -29,7 +39,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
   const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // التمرير التلقائي لأسفل عند وصول رسالة جديدة
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -38,13 +47,52 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     scrollToBottom();
   }, [messages]);
 
-  // جلب الرسائل الأولية والاستماع المباشر (Realtime)
+  // 1. جلب ID صاحب المحل (Owner ID) إذا تم تمرير shopId
   useEffect(() => {
+    if (receiverId) {
+      setResolvedReceiverId(receiverId);
+      return;
+    }
+
+    if (shopId) {
+      const fetchShopOwner = async () => {
+        const { data, error } = await supabase
+          .from("shops")
+          .select("owner_id, user_id")
+          .eq("id", shopId)
+          .single();
+
+        if (data) {
+          const ownerId = data.owner_id || data.user_id;
+          if (ownerId) {
+            setResolvedReceiverId(ownerId);
+          }
+        } else if (error) {
+          console.error("خطأ في جلب صاحب المحل:", error);
+        }
+      };
+
+      fetchShopOwner();
+    }
+  }, [shopId, receiverId]);
+
+  // 2. جلب الرسائل والتحديث الفوري بناءً على resolvedReceiverId
+  useEffect(() => {
+    if (!resolvedReceiverId && (shopId || receiverId)) return;
+
     const fetchMessages = async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("messages")
         .select("*")
         .order("created_at", { ascending: true });
+
+      if (resolvedReceiverId && currentUserId) {
+        query = query.or(
+          `and(sender_id.eq.${currentUserId},receiver_id.eq.${resolvedReceiverId}),and(sender_id.eq.${resolvedReceiverId},receiver_id.eq.${currentUserId})`
+        );
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("خطأ في جلب الرسائل:", error);
@@ -62,7 +110,13 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const newMessage = payload.new as Message;
-          setMessages((prev) => [...prev, newMessage]);
+          if (
+            !resolvedReceiverId ||
+            newMessage.sender_id === resolvedReceiverId ||
+            newMessage.sender_id === currentUserId
+          ) {
+            setMessages((prev) => [...prev, newMessage]);
+          }
         }
       )
       .subscribe();
@@ -70,9 +124,9 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chatRoomId]);
+  }, [chatRoomId, resolvedReceiverId, currentUserId]);
 
-  // دالة رفع الملفات لـ Supabase Storage بباكت chat_media
+  // 3. رفع الملفات إلى Supabase Storage (chat_media)
   const uploadFile = async (file: Blob | File, folder: string): Promise<string | null> => {
     try {
       setIsUploading(true);
@@ -108,13 +162,14 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     }
   };
 
-  // إرسال الرسالة إلى جدول messages
+  // 4. إرسال الرسالة إلى الشخص المستهدف (resolvedReceiverId)
   const sendMessage = async (content?: string, mediaUrl?: string, mediaType?: string) => {
     if (!content?.trim() && !mediaUrl) return;
 
     const { error } = await supabase.from("messages").insert([
       {
         sender_id: currentUserId,
+        receiver_id: resolvedReceiverId || null,
         content: content || null,
         media_url: mediaUrl || null,
         media_type: mediaType || null,
@@ -129,7 +184,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     }
   };
 
-  // التعامل مع اختيار الصور والملفات
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -145,7 +199,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     e.target.value = "";
   };
 
-  // بدء تسجيل الملاحظة الصوتية
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -176,7 +229,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
     }
   };
 
-  // إيقاف التسجيل وإرسال الصوت
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -192,7 +244,7 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
         {isUploading && <span className="text-xs text-amber-400 animate-pulse">جاري الرفع إلى chat_media...</span>}
       </div>
 
-      {/* منطقة عرض الرسائل */}
+      {/* منطقة الرسائل */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg) => {
           const isMe = msg.sender_id === currentUserId;
@@ -207,7 +259,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
               >
                 {msg.content && <p className="leading-relaxed">{msg.content}</p>}
 
-                {/* عرض الصور */}
                 {msg.media_type === "image" && msg.media_url && (
                   <img
                     src={msg.media_url}
@@ -216,12 +267,10 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
                   />
                 )}
 
-                {/* عرض التسجيل الصوتي */}
                 {msg.media_type === "voice" && msg.media_url && (
                   <audio controls src={msg.media_url} className="mt-2 w-full max-w-[240px]" />
                 )}
 
-                {/* عرض الملفات */}
                 {msg.media_type === "file" && msg.media_url && (
                   <a
                     href={msg.media_url}
@@ -242,9 +291,8 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
         <div ref={messagesEndRef} />
       </div>
 
-      {/* منطقة إدخال النص والأزرار */}
+      {/* منطقة الإدخال */}
       <div className="p-3 bg-slate-800 border-t border-slate-700 flex items-center gap-2">
-        {/* زر إرفاق الملفات/الصور */}
         <label className="p-2 cursor-pointer hover:bg-slate-700 rounded-full text-slate-300 transition" title="إرفاق صورة أو ملف">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -252,7 +300,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
           <input type="file" className="hidden" onChange={handleFileChange} disabled={isUploading} />
         </label>
 
-        {/* زر الملاحظة الصوتية */}
         <button
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
@@ -267,7 +314,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
           </svg>
         </button>
 
-        {/* حقل النص */}
         <input
           type="text"
           value={text}
@@ -277,7 +323,6 @@ export default function Chat({ currentUserId = "user_1", chatRoomId = "default_r
           className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 text-white"
         />
 
-        {/* زر الإرسال */}
         <button
           onClick={() => sendMessage(text)}
           disabled={!text.trim() || isUploading}
