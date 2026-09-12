@@ -18,11 +18,13 @@ export const metadata: Metadata = {
     "كاس السيارات الجزائر",
     "ateliers auto algerie",
     "pieces de rechange dz"
+    "بياس السيارات الجزائر"
+    "شراء بياس السيارات  بيع بياس السيارات"
   ],
   authors: [{ name: "PiecesDZ" }],
   openGraph: {
-    title: "PiecesDZ — Publiez et trouvez vos pièces auto en Algérie",
-    description: "Publiez votre demande, recevez des réponses de vendeurs inscrits, casses et ateliers partout en Algérie.",
+    title: "PiecesDZ — Publiez et trouvez vos pièces auto en Algérie ابحث و اشتري اجود قطع غيار السيارات في الجزائر",
+    description: "Publiez votre demande, recevez des réponses de vendeurs inscrits, casses et ateliers partout en Algérie.شراء و بيع قطع غيار السيارات في ااجزائر",
     url: "https://pieces-dz.onrender.com/",
     siteName: "PiecesDZ",
     locale: "fr_DZ",
@@ -39,7 +41,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "PiecesDZ — Trouvez vos pièces auto en Algérie",
-    description: "Publiez votre demande de pièce auto et recevez des offres réelles.",
+    description: "Publiez votre demande de pièce auto et recevez des offres réelles.اجود قطاع غيار السيارات في الجزائر",
     images: [ogImageUrl],
   },
   robots: {
