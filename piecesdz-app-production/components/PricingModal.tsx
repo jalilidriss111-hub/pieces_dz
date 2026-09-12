@@ -41,7 +41,7 @@ export default function PricingModal({ isOpen = true, onClose }: PricingModalPro
         </div>
 
         {/* كروت الاشتراكات الثلاثة */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
           
           {/* 1. الخطة المجانية */}
           <Card className="p-5 flex flex-col justify-between border-slate-800 bg-slate-900/50">
@@ -108,6 +108,11 @@ export default function PricingModal({ isOpen = true, onClose }: PricingModalPro
             </Link>
           </Card>
 
+        </div>
+
+        {/* خانة إعلان الإطلاق المجاني */}
+        <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30 text-center text-orange-400 text-xs font-medium">
+          🎉 بمناسبة إطلاق المنصة، يتاح لكم استعمال مجاني تام لمدة 3 أشهر كاملة دون أي رسوم!
         </div>
       </div>
     </div>
