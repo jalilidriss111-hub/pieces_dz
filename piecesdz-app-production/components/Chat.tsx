@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Send, Image as ImageIcon, Mic, Square, Loader2, Trash2 } from "lucide-react";
+import { Send, Image as ImageIcon, Mic, Loader2, Trash2 } from "lucide-react";
 
 interface Message {
   id: string;
@@ -40,25 +40,32 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // رفع الملفات إلى Supabase Storage
+  // رفع الملفات لـ Supabase مع تحديد نوع Content-Type بدقة
   const uploadFile = async (file: Blob | File, folder: string): Promise<string | null> => {
     try {
-      const ext = file.type.includes("webm") ? "webm" : file.type.split("/")[1] || "jpg";
+      const fileType = file.type || (folder === "voice" ? "audio/webm" : "image/jpeg");
+      const ext = fileType.split("/")[1]?.split(";")[0] || (folder === "voice" ? "webm" : "jpg");
       const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
 
       const { data, error } = await supabase.storage
         .from("chat-media")
-        .upload(fileName, file, { cacheControl: "3600", upsert: true });
+        .upload(fileName, file, {
+          cacheControl: "3600",
+          upsert: true,
+          contentType: fileType,
+        });
 
       if (error) {
-        console.error("خطأ في رفع الملف:", error.message);
+        console.error("خطأ Supabase Storage:", error);
+        alert(`خطأ في الرفع: ${error.message}. تأكد أن الباكت chat-media موجود ومفعل كـ Public.`);
         return null;
       }
 
       const { data: publicData } = supabase.storage.from("chat-media").getPublicUrl(data.path);
       return publicData.publicUrl;
-    } catch (err) {
+    } catch (err: any) {
       console.error("فشل الرفع:", err);
+      alert(`تعذر الرفع: ${err?.message || "خطأ غير معروف"}`);
       return null;
     }
   };
@@ -132,7 +139,7 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     setSending(false);
   };
 
-  // رفع وإرسال صورة مباشرة من الهاتف
+  // إرسال صورة
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -147,19 +154,26 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         content: imageUrl,
         media_type: "image",
       });
-    } else {
-      alert("تعذر إرسال الصورة. تأكد من إعدادات Supabase Storage.");
     }
 
     setSending(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // بدء التسجيل الصوتي
+  // بدء التسجيل الصوتي متوافق مع كافة المتصفحات
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+
+      let mimeType = "audio/webm";
+      if (!MediaRecorder.isTypeSupported("audio/webm")) {
+        if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
+        else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
+        else mimeType = "";
+      }
+
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -188,7 +202,8 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
 
     recorder.onstop = async () => {
       setSending(true);
-      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const recordedMimeType = recorder.mimeType || "audio/webm";
+      const audioBlob = new Blob(audioChunksRef.current, { type: recordedMimeType });
 
       if (audioBlob.size > 0) {
         const audioUrl = await uploadFile(audioBlob, "voice");
@@ -199,8 +214,6 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
             content: audioUrl,
             media_type: "audio",
           });
-        } else {
-          alert("تعذر إرسال التسجيل الصوتي.");
         }
       }
 
@@ -214,7 +227,6 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
-  // إلغاء التسجيل الصوتي
   const cancelRecording = () => {
     const recorder = mediaRecorderRef.current;
     if (recorder) {
@@ -237,7 +249,6 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
 
   return (
     <div className="flex flex-col h-full bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
-      {/* منطقة الرسائل */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]">
         {messages.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-xs">
@@ -293,7 +304,6 @@ export default function Chat({ currentUserId, receiverId }: ChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* شريط الإدخال */}
       <div className="p-3 bg-slate-950 border-t border-slate-800">
         {isRecording ? (
           <div className="flex items-center justify-between gap-3 bg-rose-500/10 border border-rose-500/30 p-2.5 rounded-xl">
