@@ -150,7 +150,7 @@ function RequestDetailModal({ request, currentUserId, onClose, onChanged }: { re
                   <button onClick={() => setSelectedShop(r.shops)} className="text-xs text-slate-400 hover:text-white transition-colors">
                     Voir les détails et noter →
                   </button>
-                  {/* زر فتح الدردشة المباشرة مع التاجر */}
+                  {/* زر فتح الدردشة المباشرة مع التاجر - نأخذ user_id أو owner_id الخاص بالتاجر وليس معرف المحل */}
                   <PrimaryButton 
                     onClick={() => setActiveChatShop(r.shops)} 
                     className="text-xs py-1.5 px-3 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold"
@@ -178,8 +178,11 @@ function RequestDetailModal({ request, currentUserId, onClose, onChanged }: { re
               </h3>
               <button onClick={() => setActiveChatShop(null)} className="text-slate-500 hover:text-white"><X size={18} /></button>
             </div>
-            {/* استدعاء مكون الشات الذي أنشأناه سابقاً */}
-            <Chat currentUserId={currentUserId} receiverId={activeChatShop.user_id || activeChatShop.id} />
+            {/* هنا نمرر receiverId وهو المعرف الحقيقي للتاجر (user_id أو owner_id) وليس معرف المحل (id) */}
+            <Chat 
+              currentUserId={currentUserId} 
+              receiverId={activeChatShop.user_id || activeChatShop.owner_id} 
+            />
           </div>
         </div>
       )}
